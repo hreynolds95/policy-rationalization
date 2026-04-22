@@ -426,6 +426,41 @@ function renderAnalysisView() {
   const strongestCanonical = strongestGroup
     ? result.documents.find((document) => document.id === strongestGroup.recommendedPrimaryId)?.title || "None"
     : "None";
+  const viewModel = buildDocumentViewModel(result);
+  const kpiCards = [
+    {
+      label: "Level review",
+      value: viewModel.filter((document) => document.documentLevel.levelFit !== "aligned").length,
+      filter: "level",
+      target: "levelSection",
+      tone: "warning",
+      helper: "Documents operating at the wrong requirement level.",
+    },
+    {
+      label: "Review flags",
+      value: result.groups.filter((group) => groupHasReviewFlags(group)).length,
+      filter: "review",
+      target: "groupsSection",
+      tone: "warning",
+      helper: "Groups with mixed level, scope, or procedural concerns.",
+    },
+    {
+      label: "Cleaner fits",
+      value: result.groups.filter((group) => !groupHasReviewFlags(group)).length,
+      filter: "ready",
+      target: "groupsSection",
+      tone: "success",
+      helper: "Groups that appear cleaner for consolidation review.",
+    },
+    {
+      label: "Ungrouped docs",
+      value: viewModel.filter((document) => document.groupLabel === "Ungrouped").length,
+      filter: "orphan",
+      target: "documentsSection",
+      tone: "info",
+      helper: "Documents not currently assigned to a duplicate cluster.",
+    },
+  ];
 
   output.innerHTML = `
     <section class="results-shell">
@@ -440,18 +475,9 @@ function renderAnalysisView() {
             <p>${summary}</p>
           </div>
           <div class="snapshot-kpis results-stats">
-            <article class="panel snapshot-kpi-card">
-              <span class="snapshot-kpi-label">Documents</span>
-              <span class="snapshot-kpi-value info">${filtered.documents.length}</span>
-            </article>
-            <article class="panel snapshot-kpi-card">
-              <span class="snapshot-kpi-label">High-Similarity Pairs</span>
-              <span class="snapshot-kpi-value warning">${filtered.edges.length}</span>
-            </article>
-            <article class="panel snapshot-kpi-card">
-              <span class="snapshot-kpi-label">Duplicate Groups</span>
-              <span class="snapshot-kpi-value success">${filtered.groups.length}</span>
-            </article>
+            ${kpiCards
+              .map((card) => buildShortcutCard(card, filter))
+              .join("")}
           </div>
         </div>
       </div>
@@ -790,6 +816,22 @@ function buildFilterButton(value, label, activeFilter) {
   return `<button class="toggle-btn ${activeClass}" type="button" data-view-filter="${value}">${label}</button>`;
 }
 
+function buildShortcutCard(card, activeFilter) {
+  const activeClass = activeFilter === card.filter ? "active" : "";
+  return `
+    <button
+      class="panel snapshot-kpi-card snapshot-kpi-card--shortcut ${activeClass}"
+      type="button"
+      data-kpi-filter="${card.filter}"
+      data-kpi-target="${card.target}"
+    >
+      <span class="snapshot-kpi-label">${card.label}</span>
+      <span class="snapshot-kpi-value ${card.tone}">${card.value}</span>
+      <span class="snapshot-kpi-helper">${card.helper}</span>
+    </button>
+  `;
+}
+
 function groupHasReviewFlags(group) {
   return (
     group.checks.documentLevelConsistency === "mixed-level" ||
@@ -940,6 +982,28 @@ function wireResultControls(scope) {
       renderAnalysisView();
     });
   });
+
+  scope.querySelectorAll("[data-kpi-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextFilter = button.getAttribute("data-kpi-filter");
+      const targetId = button.getAttribute("data-kpi-target");
+      state.analysisView.query = "";
+      state.analysisView.filter = nextFilter;
+      renderAnalysisView();
+      requestAnimationFrame(() => {
+        revealWorkflowSection(targetId);
+      });
+    });
+  });
+}
+
+function revealWorkflowSection(targetId) {
+  const section = document.querySelector(`#${targetId}`);
+  if (!section) {
+    return;
+  }
+  section.classList.remove("collapsed");
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function runAnalysis() {
