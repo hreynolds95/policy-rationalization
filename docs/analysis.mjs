@@ -1,5 +1,39 @@
 const TOKEN_RE = /[a-zA-Z][a-zA-Z0-9_-]+/g;
 
+const POLICY_TERMS = [
+  "policy",
+  "governance",
+  "principle",
+  "principles",
+  "scope",
+  "purpose",
+  "applies",
+  "must",
+  "shall",
+];
+const STANDARD_TERMS = [
+  "standard",
+  "baseline",
+  "control",
+  "controls",
+  "minimum",
+  "requirement",
+  "requirements",
+  "specification",
+  "configuration",
+];
+const PROCEDURE_TERMS = [
+  "procedure",
+  "procedures",
+  "process",
+  "workflow",
+  "instruction",
+  "instructions",
+  "runbook",
+  "step",
+  "steps",
+];
+
 export function tokenize(text) {
   return (text.match(TOKEN_RE) || []).map((token) => token.toLowerCase());
 }
@@ -111,18 +145,99 @@ function sourceDepth(source) {
   return source.split("/").filter(Boolean).length;
 }
 
+function countMatches(text, terms) {
+  const lower = text.toLowerCase();
+  return terms.reduce((sum, term) => sum + (lower.includes(term) ? 1 : 0), 0);
+}
+
+export function evaluateDocumentLevel(document) {
+  const title = document.title.toLowerCase();
+  const text = document.text.toLowerCase();
+  const combined = `${title}\n${text}`;
+
+  const titlePolicy = title.includes("policy") ? 3 : 0;
+  const titleStandard = title.includes("standard") ? 3 : 0;
+  const titleProcedure = title.includes("procedure") || title.includes("process") ? 3 : 0;
+
+  const scores = {
+    policy: titlePolicy + countMatches(combined, POLICY_TERMS),
+    standard: titleStandard + countMatches(combined, STANDARD_TERMS),
+    procedure: titleProcedure + countMatches(combined, PROCEDURE_TERMS),
+  };
+
+  const inferredType = Object.entries(scores).sort((left, right) => right[1] - left[1])[0][0];
+  const policySignals = countMatches(combined, POLICY_TERMS);
+  const standardSignals = countMatches(combined, STANDARD_TERMS);
+  const procedureSignals = countMatches(combined, PROCEDURE_TERMS);
+  const hasStepPattern = /\bstep\s+\d+\b/.test(text);
+  const levelIssues = [];
+  let levelFit = "aligned";
+
+  if (inferredType === "policy") {
+    if (procedureSignals >= 2 || hasStepPattern) {
+      levelFit = "misaligned";
+      levelIssues.push("contains procedural or step-by-step language better suited to a procedure");
+    }
+    if (standardSignals >= 4) {
+      levelFit = levelFit === "misaligned" ? "misaligned" : "review";
+      levelIssues.push("reads like a control standard in places and may be carrying implementation detail");
+    }
+  }
+
+  if (inferredType === "standard") {
+    if (procedureSignals >= 3 || hasStepPattern) {
+      levelFit = "review";
+      levelIssues.push("contains execution-oriented language that may belong in a procedure");
+    }
+    if (standardSignals < 2) {
+      levelFit = "review";
+      levelIssues.push("does not show enough control-specific or minimum-requirement language for a standard");
+    }
+  }
+
+  if (inferredType === "procedure") {
+    if (procedureSignals < 2 && !hasStepPattern) {
+      levelFit = "review";
+      levelIssues.push("does not read like a step-based procedure yet");
+    }
+    if (policySignals >= 4 && standardSignals === 0) {
+      levelFit = "review";
+      levelIssues.push("reads at a policy level and may not belong in a procedure document");
+    }
+  }
+
+  return {
+    inferredType,
+    levelFit,
+    levelIssues,
+    signalCounts: {
+      policy: policySignals,
+      standard: standardSignals,
+      procedure: procedureSignals,
+    },
+  };
+}
+
 function evaluateConstraints(group, documentById) {
   const combined = group.documentIds.map((id) => documentById.get(id).text.toLowerCase()).join("\n");
   const proceduralTerms = ["procedure", "step 1", "workflow", "how to"];
   const regulatoryTerms = ["regulation", "regulatory", "legal", "compliance", "statutory"];
   const brandTerms = ["brand", "affiliate", "subsidiary", "entity"];
+  const levelTypes = new Set(group.documentIds.map((id) => documentById.get(id).documentLevel.inferredType));
+  const levelIssues = group.documentIds.flatMap((id) => documentById.get(id).documentLevel.levelIssues);
+  const hasLevelReview = group.documentIds.some(
+    (id) => documentById.get(id).documentLevel.levelFit !== "aligned"
+  );
 
   return {
+    documentLevelConsistency: levelTypes.size === 1 ? "consistent" : "mixed-level",
+    documentLevelFit: hasLevelReview || levelTypes.size > 1 ? "review-needed" : "aligned",
     businessPracticeAlignment: "manual-review",
     brandScopeCoverage: brandTerms.some((term) => combined.includes(term)) ? "present" : "missing",
     regulatoryReflection: regulatoryTerms.some((term) => combined.includes(term)) ? "present" : "missing",
     proceduralContentDetected: proceduralTerms.some((term) => combined.includes(term)) ? "yes" : "no",
     rolesSectionDetected: combined.includes("roles and responsibilities") ? "yes" : "no",
+    documentLevelIssues: levelIssues,
   };
 }
 
@@ -139,6 +254,12 @@ function buildRecommendation(group, documentById, checks) {
   }
   if (checks.proceduralContentDetected === "yes") {
     blockers.push("remove procedural detail from policy-level content");
+  }
+  if (checks.documentLevelConsistency === "mixed-level") {
+    blockers.push("separate policy, standard, and procedure material before consolidation");
+  }
+  if (checks.documentLevelFit === "review-needed") {
+    blockers.push("reconfirm each document is operating at the right requirement level");
   }
 
   const blockerSentence = blockers.length
@@ -228,10 +349,14 @@ export function analyzeDocuments(documents, threshold = 0.45) {
     source: document.source || `manual://document-${index + 1}`,
     text: document.text || "",
   }));
-  const edges = computeSimilarityEdges(normalizedDocuments, threshold);
-  const groups = buildDuplicateGroups(normalizedDocuments, edges);
+  const documentsWithLevel = normalizedDocuments.map((document) => ({
+    ...document,
+    documentLevel: evaluateDocumentLevel(document),
+  }));
+  const edges = computeSimilarityEdges(documentsWithLevel, threshold);
+  const groups = buildDuplicateGroups(documentsWithLevel, edges);
   return {
-    documents: normalizedDocuments,
+    documents: documentsWithLevel,
     edges,
     groups,
   };

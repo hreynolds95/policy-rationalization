@@ -704,6 +704,13 @@ button:hover,
   word-break: break-word;
 }
 
+.document-note {
+  margin: 2px 0 0;
+  color: var(--warning);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .doc-badge {
   display: inline-flex;
   align-items: center;

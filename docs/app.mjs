@@ -254,6 +254,7 @@ function renderAnalysisView() {
 
   const summary = buildSummary(result);
   const filtered = filterAnalysisView(result, issues, query, filter);
+  const levelHtml = buildLevelMarkup(filtered.documents);
   const groupsHtml = buildGroupMarkup(result, filtered.groups);
   const pairsHtml = buildPairMarkup(result, filtered.edges);
   const issuesHtml = buildIssuesMarkup(filtered.issues);
@@ -309,6 +310,7 @@ function renderAnalysisView() {
         <div class="filter-toolbar">
           <div class="toggle-group" data-filter-group>
             ${buildFilterButton("all", "All", filter)}
+            ${buildFilterButton("level", "Level review", filter)}
             ${buildFilterButton("review", "Review flags", filter)}
             ${buildFilterButton("ready", "Cleaner fits", filter)}
             ${buildFilterButton("orphan", "Ungrouped docs", filter)}
@@ -316,6 +318,21 @@ function renderAnalysisView() {
           <p class="section-subtitle">
             Search and filters update the review surface without rerunning the analysis.
           </p>
+        </div>
+      </section>
+
+      <section class="panel table-panel collapsible" id="levelSection">
+        <div class="collapsible-header" data-toggle="levelSection">
+          <div class="collapsible-title-group">
+            <h3>Step 1: document level evaluation</h3>
+            <p class="section-subtitle">Check whether each document is operating at the right level of requirements before consolidation.</p>
+          </div>
+          <span class="collapse-icon"></span>
+        </div>
+        <div class="collapsible-body">
+          <div class="results-section">
+            ${levelHtml}
+          </div>
         </div>
       </section>
 
@@ -386,16 +403,51 @@ function renderAnalysisView() {
 }
 
 function buildSummary(result) {
+  const levelReviewCount = result.documents.filter(
+    (document) => document.documentLevel.levelFit !== "aligned"
+  ).length;
   if (!result.groups.length) {
     if (!result.edges.length) {
-      return "No consolidation cluster cleared the current threshold. That usually means the document set is either cleanly separated or the threshold is too strict for the material you loaded.";
+      return `No consolidation cluster cleared the current threshold. ${levelReviewCount ? `${levelReviewCount} document(s) still need level review before consolidation work.` : "The document set may simply be cleanly separated."}`;
     }
-    return "A few documents overlap, but they do not yet form a strong duplicate group. Review the top pairs first and consider lowering the threshold slightly if you want broader clustering.";
+    return `A few documents overlap, but they do not yet form a strong duplicate group. ${levelReviewCount ? `${levelReviewCount} document(s) also need level review first.` : "Review the top pairs first and consider lowering the threshold slightly if you want broader clustering."}`;
   }
 
   const strongest = result.groups[0];
   const primary = result.documents.find((document) => document.id === strongest.recommendedPrimaryId);
-  return `${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. The recommendation keeps required structure intact and pushes brand scope, regulatory coverage, and procedural content into explicit review checks.`;
+  return `${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. ${levelReviewCount ? `${levelReviewCount} document(s) show possible policy-versus-standard-versus-procedure level issues and should be corrected before consolidation.` : "The recommendation keeps required structure intact and pushes brand scope, regulatory coverage, and procedural content into explicit review checks."}`;
+}
+
+function buildLevelMarkup(documents) {
+  if (!documents.length) {
+    return `<article class="result-card"><p>No documents match the current search and filter.</p></article>`;
+  }
+
+  return `
+    <article class="result-card">
+      <ul class="document-list">
+        ${documents
+          .map(
+            (document) => `
+              <li class="document-row">
+                <div class="document-row__main">
+                  <strong>${document.title}</strong>
+                  <span>${document.source}</span>
+                  ${document.documentLevel.levelIssues.length ? `<p class="document-note">${document.documentLevel.levelIssues.join("; ")}</p>` : ""}
+                </div>
+                <div class="document-row__meta">
+                  <span class="doc-badge">${document.documentLevel.inferredType}</span>
+                  <span class="doc-badge ${document.documentLevel.levelFit === "aligned" ? "doc-badge--ok" : "doc-badge--warn"}">
+                    ${document.documentLevel.levelFit}
+                  </span>
+                </div>
+              </li>
+            `
+          )
+          .join("")}
+      </ul>
+    </article>
+  `;
 }
 
 function buildGroupMarkup(result, groups) {
@@ -491,6 +543,7 @@ function buildDocumentMarkup(documents) {
                   <span>${document.source}</span>
                 </div>
                 <div class="document-row__meta">
+                  <span class="doc-badge">${document.documentLevel.inferredType}</span>
                   <span class="doc-badge">${document.groupLabel}</span>
                   <span class="doc-badge ${document.needsReview ? "doc-badge--warn" : "doc-badge--ok"}">
                     ${document.needsReview ? "Review flags" : "No major flags"}
@@ -532,6 +585,8 @@ function buildFilterButton(value, label, activeFilter) {
 
 function groupHasReviewFlags(group) {
   return (
+    group.checks.documentLevelConsistency === "mixed-level" ||
+    group.checks.documentLevelFit === "review-needed" ||
     group.checks.brandScopeCoverage === "missing" ||
     group.checks.regulatoryReflection === "missing" ||
     group.checks.proceduralContentDetected === "yes"
@@ -557,7 +612,7 @@ function buildDocumentViewModel(result) {
           ? "Canonical candidate"
           : "Grouped document"
         : "Ungrouped",
-      needsReview,
+      needsReview: group ? needsReview || document.documentLevel.levelFit !== "aligned" : document.documentLevel.levelFit !== "aligned",
       canonicalTitle: group
         ? result.documents.find((candidate) => candidate.id === group.recommendedPrimaryId)?.title || ""
         : "",
@@ -595,6 +650,9 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
     if (filter === "review") {
       return groupReview;
     }
+    if (filter === "level") {
+      return group.checks.documentLevelConsistency === "mixed-level" || group.checks.documentLevelFit === "review-needed";
+    }
     if (filter === "ready") {
       return !groupReview;
     }
@@ -614,6 +672,9 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
     }
     if (filter === "review") {
       return document.needsReview;
+    }
+    if (filter === "level") {
+      return document.documentLevel.levelFit !== "aligned";
     }
     if (filter === "ready") {
       return document.groupLabel !== "Ungrouped" && !document.needsReview;

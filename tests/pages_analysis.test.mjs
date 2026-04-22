@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   analyzeDocuments,
+  evaluateDocumentLevel,
   normalizeGoogleExportUrl,
   parseCsv,
   tokenize,
@@ -69,4 +70,39 @@ test("analyzeDocuments groups related retention documents", () => {
   assert.equal(result.groups.length, 1);
   assert.equal(result.groups[0].documentIds.length, 2);
   assert.equal(result.groups[0].checks.rolesSectionDetected, "yes");
+});
+
+test("evaluateDocumentLevel flags procedural content inside a policy", () => {
+  const level = evaluateDocumentLevel({
+    title: "Access Control Policy",
+    text: "Purpose scope and governance statements. Step 1 submit the form. Step 2 get manager approval.",
+  });
+
+  assert.equal(level.inferredType, "policy");
+  assert.equal(level.levelFit, "misaligned");
+  assert.ok(level.levelIssues.some((issue) => issue.includes("procedural")));
+});
+
+test("analyzeDocuments exposes mixed-level groups for review", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Data Retention Policy",
+        source: "manual://a",
+        text: "policy purpose scope applies must retain records across brands and legal entities",
+      },
+      {
+        id: "b",
+        title: "Data Retention Procedure",
+        source: "manual://b",
+        text: "data retention procedure workflow for records retention. step 1 identify records. step 2 archive records. step 3 confirm retention completion.",
+      },
+    ],
+    0.05
+  );
+
+  assert.equal(result.groups.length, 1);
+  assert.equal(result.groups[0].checks.documentLevelConsistency, "mixed-level");
+  assert.equal(result.groups[0].checks.documentLevelFit, "review-needed");
 });
