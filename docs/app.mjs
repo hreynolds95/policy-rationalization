@@ -184,44 +184,88 @@ function renderResults(result, issues) {
   const groupsHtml = buildGroupMarkup(result);
   const pairsHtml = buildPairMarkup(result);
   const issuesHtml = buildIssuesMarkup(issues);
+  const strongestGroup = result.groups[0];
+  const strongestCanonical = strongestGroup
+    ? result.documents.find((document) => document.id === strongestGroup.recommendedPrimaryId)?.title || "None"
+    : "None";
 
   output.innerHTML = `
     <section class="results-shell">
-      <div class="results-hero">
-        <div>
+      <div class="panel table-panel">
+        <div class="results-hero">
+          <div>
           <p class="eyebrow">Analysis complete</p>
-          <h2>Consolidation candidates and review flags</h2>
-          <p>${summary}</p>
-        </div>
-        <div class="results-stats">
-          <article class="stat">
-            <span class="stat__label">Documents</span>
-            <strong>${result.documents.length}</strong>
-          </article>
-          <article class="stat">
-            <span class="stat__label">High-similarity pairs</span>
-            <strong>${result.edges.length}</strong>
-          </article>
-          <article class="stat">
-            <span class="stat__label">Duplicate groups</span>
-            <strong>${result.groups.length}</strong>
-          </article>
+            <h2>Consolidation candidates and review flags</h2>
+            <p class="section-subtitle">
+              Strongest canonical candidate: ${strongestCanonical}
+            </p>
+            <p>${summary}</p>
+          </div>
+          <div class="snapshot-kpis results-stats">
+            <article class="panel snapshot-kpi-card">
+              <span class="snapshot-kpi-label">Documents</span>
+              <span class="snapshot-kpi-value info">${result.documents.length}</span>
+            </article>
+            <article class="panel snapshot-kpi-card">
+              <span class="snapshot-kpi-label">High-Similarity Pairs</span>
+              <span class="snapshot-kpi-value warning">${result.edges.length}</span>
+            </article>
+            <article class="panel snapshot-kpi-card">
+              <span class="snapshot-kpi-label">Duplicate Groups</span>
+              <span class="snapshot-kpi-value success">${result.groups.length}</span>
+            </article>
+          </div>
         </div>
       </div>
-      <section class="results-section">
-        <h3>Recommended consolidation groups</h3>
-        ${groupsHtml}
+
+      <section class="panel table-panel collapsible" id="groupsSection">
+        <div class="collapsible-header" data-toggle="groupsSection">
+          <div class="collapsible-title-group">
+            <h3>Recommended consolidation groups</h3>
+            <p class="section-subtitle">Canonical candidates with review checks and source membership.</p>
+          </div>
+          <span class="collapse-icon"></span>
+        </div>
+        <div class="collapsible-body">
+          <div class="results-section">
+            ${groupsHtml}
+          </div>
+        </div>
       </section>
-      <section class="results-section">
-        <h3>Top similarity pairs</h3>
-        ${pairsHtml}
+
+      <section class="panel table-panel collapsible collapsed" id="pairsSection">
+        <div class="collapsible-header" data-toggle="pairsSection">
+          <div class="collapsible-title-group">
+            <h3>Top similarity pairs</h3>
+            <p class="section-subtitle">Fast triage view for overlapping documents that may not form a full cluster.</p>
+          </div>
+          <span class="collapse-icon"></span>
+        </div>
+        <div class="collapsible-body">
+          <div class="results-section">
+            ${pairsHtml}
+          </div>
+        </div>
       </section>
-      <section class="results-section">
-        <h3>Import issues</h3>
-        ${issuesHtml}
+
+      <section class="panel table-panel collapsible collapsed" id="issuesSection">
+        <div class="collapsible-header" data-toggle="issuesSection">
+          <div class="collapsible-title-group">
+            <h3>Import issues</h3>
+            <p class="section-subtitle">CORS, authentication, parsing, and empty-content warnings.</p>
+          </div>
+          <span class="collapse-icon"></span>
+        </div>
+        <div class="collapsible-body">
+          <div class="results-section">
+            ${issuesHtml}
+          </div>
+        </div>
       </section>
     </section>
   `;
+
+  wireCollapsibles(output);
 }
 
 function buildSummary(result) {
@@ -331,6 +375,16 @@ function formatLabel(value) {
   return value
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (match) => match.toUpperCase());
+}
+
+function wireCollapsibles(scope) {
+  scope.querySelectorAll("[data-toggle]").forEach((trigger) => {
+    trigger.addEventListener("click", () => {
+      const id = trigger.getAttribute("data-toggle");
+      const section = scope.querySelector(`#${id}`);
+      section?.classList.toggle("collapsed");
+    });
+  });
 }
 
 async function runAnalysis() {
