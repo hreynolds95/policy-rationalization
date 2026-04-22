@@ -287,6 +287,40 @@ body {
   gap: 8px;
 }
 
+.demo-banner {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 217, 102, 0.28);
+  background: linear-gradient(180deg, rgba(255, 217, 102, 0.1), rgba(255, 217, 102, 0.04));
+}
+
+.demo-banner--results {
+  margin-bottom: 10px;
+}
+
+.demo-banner strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.demo-banner span {
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.demo-banner__eyebrow {
+  margin: 0;
+  color: var(--warning);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
 .source-chip {
   display: inline-flex;
   align-items: center;

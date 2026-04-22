@@ -17,6 +17,7 @@ const state = {
     documents: [],
     threshold: 0.45,
     levelOverrides: {},
+    usedSampleData: false,
     result: null,
     issues: [],
   },
@@ -231,6 +232,40 @@ function updateSourceSummary() {
   ];
 
   target.innerHTML = chips.join("");
+}
+
+export function buildDemoBannerContent(sampleCount, context = "workspace") {
+  const descriptor =
+    context === "results"
+      ? "The current analysis includes illustrative demo content."
+      : "Demo mode is active in this workspace.";
+
+  return {
+    title: "Demo mode",
+    body: `${descriptor} Built-in sample documents and example URLs are intended for walkthroughs and quick feedback, not policy decisions.`,
+    detail: `${pluralize(sampleCount, "sample document")} available in the bundled library.`,
+  };
+}
+
+function renderDemoBanner() {
+  const target = document.querySelector("[data-demo-banner]");
+  if (!target) {
+    return;
+  }
+
+  if (!state.includeSampleData) {
+    target.innerHTML = "";
+    return;
+  }
+
+  const banner = buildDemoBannerContent(SAMPLE_DOCUMENTS.length, "workspace");
+  target.innerHTML = `
+    <div class="demo-banner">
+      <p class="demo-banner__eyebrow">${banner.title}</p>
+      <strong>${banner.body}</strong>
+      <span>${banner.detail}</span>
+    </div>
+  `;
 }
 
 function computeWorkspaceReadiness() {
@@ -529,6 +564,7 @@ function loadDemoSetup() {
   urlsField.value = SAMPLE_URLS.join("\n");
   setActiveSourceTab("demo");
   updateSourceSummary();
+  renderDemoBanner();
   renderReadinessCard();
   renderStatus(
     "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
@@ -553,11 +589,13 @@ function resetWorkspace() {
   state.analysisView.documents = [];
   state.analysisView.threshold = 0.45;
   state.analysisView.levelOverrides = {};
+  state.analysisView.usedSampleData = false;
   state.analysisView.result = null;
   state.analysisView.issues = [];
 
   setActiveSourceTab("demo");
   updateSourceSummary();
+  renderDemoBanner();
   renderReadinessCard();
   renderEmptyResults();
   renderStatus("Workspace reset. Add demo data or your own documents to begin again.");
@@ -627,6 +665,7 @@ function renderAnalysisView() {
   output.innerHTML = `
     <section class="results-shell">
       <div class="panel table-panel">
+        ${state.analysisView.usedSampleData ? buildResultsDemoBannerMarkup() : ""}
         <div class="results-hero">
           <div>
           <p class="eyebrow">Analysis complete</p>
@@ -805,6 +844,17 @@ function renderAnalysisView() {
 
   wireCollapsibles(output);
   wireResultControls(output);
+}
+
+function buildResultsDemoBannerMarkup() {
+  const banner = buildDemoBannerContent(SAMPLE_DOCUMENTS.length, "results");
+  return `
+    <div class="demo-banner demo-banner--results">
+      <p class="demo-banner__eyebrow">${banner.title}</p>
+      <strong>${banner.body}</strong>
+      <span>${banner.detail}</span>
+    </div>
+  `;
 }
 
 function buildSummary(result) {
@@ -1531,6 +1581,7 @@ async function runAnalysis() {
     const result = analyzeDocuments(documents, threshold, state.analysisView.levelOverrides);
     state.analysisView.query = "";
     state.analysisView.filter = "all";
+    state.analysisView.usedSampleData = state.includeSampleData;
     renderResults(result, issues);
     renderStatus(
       `Analyzed ${result.documents.length} documents with a ${threshold.toFixed(2)} similarity threshold.`,
@@ -1551,6 +1602,7 @@ function wireDemoControls() {
   toggle.addEventListener("change", () => {
     state.includeSampleData = toggle.checked;
     updateSourceSummary();
+    renderDemoBanner();
     renderReadinessCard();
   });
 
@@ -1605,6 +1657,7 @@ function initialize() {
   wireSourceTabs();
   setActiveSourceTab(state.activeSourceTab);
   updateSourceSummary();
+  renderDemoBanner();
   renderReadinessCard();
   void loadDeploymentBadge();
   renderEmptyResults();
