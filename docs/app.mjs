@@ -17,6 +17,9 @@ const state = {
   },
 };
 
+const DEPLOYMENT_API_URL =
+  "https://api.github.com/repos/hreynolds95/policy-rationalization/pages/builds/latest";
+
 function createManualDocumentCard(title = "", text = "") {
   const wrapper = document.createElement("article");
   wrapper.className = "manual-card";
@@ -182,6 +185,59 @@ function renderStatus(message, tone = "neutral") {
   const status = document.querySelector("[data-status]");
   status.textContent = message;
   status.dataset.tone = tone;
+}
+
+function formatDeploymentTimestamp(value) {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function setDeploymentBadge(label, timestamp) {
+  const labelNode = document.querySelector("#deployLabel");
+  const timestampNode = document.querySelector("#deployTimestamp");
+  if (labelNode) {
+    labelNode.textContent = label;
+  }
+  if (timestampNode) {
+    timestampNode.textContent = timestamp;
+  }
+}
+
+async function loadDeploymentBadge() {
+  try {
+    const response = await fetch(DEPLOYMENT_API_URL, {
+      headers: {
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub API returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const commit = (payload.commit || "").slice(0, 7) || "unknown";
+    const updatedAt = payload.updated_at || payload.created_at;
+    const status = payload.status || "unknown";
+    setDeploymentBadge(
+      `Latest successful Pages deploy: ${commit}`,
+      `${formatDeploymentTimestamp(updatedAt)} • status: ${status}`
+    );
+  } catch {
+    const fallback = document.lastModified
+      ? formatDeploymentTimestamp(document.lastModified)
+      : "timestamp unavailable";
+    setDeploymentBadge("Latest deploy metadata unavailable", `Page file timestamp: ${fallback}`);
+  }
 }
 
 function renderResults(result, issues) {
@@ -691,6 +747,7 @@ function initialize() {
   setupManualDocuments();
   wireDemoControls();
   wireForm();
+  void loadDeploymentBadge();
   renderStatus("Ready. Load the demo library, upload files, paste URLs, or add manual documents.");
 }
 
