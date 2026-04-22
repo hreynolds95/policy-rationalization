@@ -490,17 +490,27 @@ function renderAnalysisView() {
       </div>
 
       <section class="panel table-panel" id="analysisExplorer">
-        <div class="search-header">
-          <h3>Analysis explorer</h3>
-          <div class="search-bar">
-            <input
-              type="text"
-              id="analysisSearch"
-              placeholder="Search titles, sources, canonical candidates, or recommendations..."
-              autocomplete="off"
-              value="${escapeHtml(query)}"
-            />
-            <span class="search-count">${filtered.groups.length} groups / ${filtered.documents.length} docs</span>
+        <div class="analysis-controls">
+          <div class="search-header">
+            <h3>Analysis explorer</h3>
+            <div class="search-bar">
+              <input
+                type="text"
+                id="analysisSearch"
+                placeholder="Search titles, sources, canonical candidates, or recommendations..."
+                autocomplete="off"
+                value="${escapeHtml(query)}"
+              />
+              <span class="search-count">${filtered.groups.length} groups / ${filtered.documents.length} docs</span>
+            </div>
+          </div>
+          <div class="export-actions">
+            <button class="ghost-button ghost-button--small" type="button" data-export-format="csv">
+              Export CSV
+            </button>
+            <button class="ghost-button ghost-button--small" type="button" data-export-format="md">
+              Export Markdown
+            </button>
           </div>
         </div>
         <div class="filter-toolbar">
@@ -512,7 +522,7 @@ function renderAnalysisView() {
             ${buildFilterButton("orphan", "Ungrouped docs", filter)}
           </div>
           <p class="section-subtitle">
-            Search and filters update the review surface without rerunning the analysis.
+            Search and filters update the review surface without rerunning the analysis. Exports reflect the current filtered view.
           </p>
         </div>
       </section>
@@ -907,6 +917,168 @@ function buildDocumentViewModel(result) {
   });
 }
 
+export function buildExportPayload(result, issues, rawQuery, filter, threshold = 0.45) {
+  const filtered = filterAnalysisView(result, issues, rawQuery, filter);
+  return {
+    createdAt: new Date().toISOString(),
+    threshold,
+    query: rawQuery.trim(),
+    filter,
+    summary: buildSummary(result),
+    strongestCanonicalTitle:
+      result.groups[0] && result.documents.find((document) => document.id === result.groups[0].recommendedPrimaryId)
+        ? result.documents.find((document) => document.id === result.groups[0].recommendedPrimaryId).title
+        : "None",
+    filtered,
+  };
+}
+
+function csvEscape(value) {
+  const stringValue = String(value ?? "");
+  if (/[",\n]/.test(stringValue)) {
+    return `"${stringValue.replaceAll('"', '""')}"`;
+  }
+  return stringValue;
+}
+
+export function buildCsvExport(payload) {
+  const rows = [
+    [
+      "title",
+      "source",
+      "inferred_type",
+      "auto_inferred_type",
+      "override_type",
+      "level_fit",
+      "level_issues",
+      "group_label",
+      "canonical_title",
+      "needs_review",
+    ],
+  ];
+
+  for (const document of payload.filtered.documents) {
+    rows.push([
+      document.title,
+      document.source,
+      document.documentLevel.inferredType,
+      document.documentLevel.autoInferredType || document.documentLevel.inferredType,
+      document.documentLevel.overrideType || "",
+      document.documentLevel.levelFit,
+      document.documentLevel.levelIssues.join("; "),
+      document.groupLabel || "",
+      document.canonicalTitle || "",
+      document.needsReview ? "yes" : "no",
+    ]);
+  }
+
+  return rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+}
+
+export function buildMarkdownExport(payload) {
+  const lines = [
+    "# Policy Rationalization Analysis",
+    "",
+    `Generated: ${payload.createdAt}`,
+    `Similarity threshold: ${payload.threshold.toFixed(2)}`,
+    `Active filter: ${payload.filter}`,
+    `Search query: ${payload.query || "None"}`,
+    "",
+    "## Summary",
+    "",
+    payload.summary,
+    "",
+    `Strongest canonical candidate: ${payload.strongestCanonicalTitle}`,
+    "",
+    "## Snapshot",
+    "",
+    `- Visible duplicate groups: ${payload.filtered.groups.length}`,
+    `- Visible documents: ${payload.filtered.documents.length}`,
+    `- Visible similarity pairs: ${payload.filtered.edges.length}`,
+    `- Visible import issues: ${payload.filtered.issues.length}`,
+    "",
+    "## Consolidation Groups",
+    "",
+  ];
+
+  if (!payload.filtered.groups.length) {
+    lines.push("No duplicate groups are visible in the current view.", "");
+  } else {
+    payload.filtered.groups.forEach((group, index) => {
+      const groupDocuments = group.documentIds
+        .map((id) => payload.filtered.documents.find((document) => document.id === id))
+        .filter(Boolean);
+      lines.push(`### Group ${index + 1}`);
+      lines.push("");
+      lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
+      lines.push(`- Recommendation: ${group.recommendation}`);
+      lines.push(`- Checks: ${Object.entries(group.checks).map(([label, value]) => `${formatLabel(label)} = ${value}`).join("; ")}`);
+      lines.push("- Documents:");
+      lines.push(...groupDocuments.map((document) => `  - ${document.title} (${document.documentLevel.inferredType})`));
+      lines.push("");
+    });
+  }
+
+  lines.push("## Document Review Surface", "");
+
+  if (!payload.filtered.documents.length) {
+    lines.push("No documents are visible in the current view.", "");
+  } else {
+    payload.filtered.documents.forEach((document) => {
+      lines.push(`### ${document.title}`);
+      lines.push("");
+      lines.push(`- Source: ${document.source}`);
+      lines.push(`- Evaluated level: ${document.documentLevel.inferredType}`);
+      lines.push(`- Auto-inferred level: ${document.documentLevel.autoInferredType || document.documentLevel.inferredType}`);
+      lines.push(`- Manual override: ${document.documentLevel.overrideType || "None"}`);
+      lines.push(`- Level fit: ${document.documentLevel.levelFit}`);
+      lines.push(`- Group status: ${document.groupLabel || "Ungrouped"}`);
+      lines.push(`- Canonical candidate: ${document.canonicalTitle || "None"}`);
+      lines.push(`- Review needed: ${document.needsReview ? "Yes" : "No"}`);
+      lines.push(`- Level issues: ${document.documentLevel.levelIssues.join("; ") || "None"}`);
+      lines.push("");
+    });
+  }
+
+  lines.push("## Top Similarity Pairs", "");
+
+  if (!payload.filtered.edges.length) {
+    lines.push("No similarity pairs are visible in the current view.", "");
+  } else {
+    payload.filtered.edges.slice(0, 12).forEach((edge) => {
+      const left = payload.filtered.documents.find((document) => document.id === edge.leftId);
+      const right = payload.filtered.documents.find((document) => document.id === edge.rightId);
+      lines.push(`- ${left?.title || edge.leftId} <-> ${right?.title || edge.rightId}: ${edge.score.toFixed(4)}`);
+    });
+    lines.push("");
+  }
+
+  lines.push("## Import Issues", "");
+  lines.push(...(payload.filtered.issues.length ? payload.filtered.issues.map((issue) => `- ${issue}`) : ["- None"]));
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+function sanitizeFileLabel(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "all";
+}
+
+function downloadTextFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 function matchesSearch(haystacks, query) {
   if (!query) {
     return true;
@@ -1051,6 +1223,12 @@ function wireResultControls(scope) {
       });
     });
   });
+
+  scope.querySelectorAll("[data-export-format]").forEach((button) => {
+    button.addEventListener("click", () => {
+      exportCurrentView(button.getAttribute("data-export-format"));
+    });
+  });
 }
 
 function revealWorkflowSection(targetId) {
@@ -1080,6 +1258,39 @@ function rerunAnalysisWithOverrides() {
   );
   state.analysisView.result = nextResult;
   renderAnalysisView();
+}
+
+function exportCurrentView(format) {
+  if (!state.analysisView.result) {
+    return;
+  }
+
+  const payload = buildExportPayload(
+    state.analysisView.result,
+    state.analysisView.issues,
+    state.analysisView.query,
+    state.analysisView.filter,
+    state.analysisView.threshold
+  );
+  const filterLabel = sanitizeFileLabel(state.analysisView.filter);
+  const dateLabel = payload.createdAt.slice(0, 10);
+
+  if (format === "csv") {
+    downloadTextFile(
+      `policy-rationalization-${dateLabel}-${filterLabel}.csv`,
+      buildCsvExport(payload),
+      "text/csv;charset=utf-8"
+    );
+    renderStatus("Exported CSV for the current filtered view.", "success");
+    return;
+  }
+
+  downloadTextFile(
+    `policy-rationalization-${dateLabel}-${filterLabel}.md`,
+    buildMarkdownExport(payload),
+    "text/markdown;charset=utf-8"
+  );
+  renderStatus("Exported Markdown summary for the current filtered view.", "success");
 }
 
 async function runAnalysis() {
@@ -1195,4 +1406,6 @@ function initialize() {
   renderStatus("Ready. Load the demo library, upload files, paste URLs, or add manual documents.");
 }
 
-initialize();
+if (typeof document !== "undefined") {
+  initialize();
+}

@@ -529,6 +529,12 @@ button:hover,
   margin-bottom: 12px;
 }
 
+.analysis-controls {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .search-header h3 {
   margin: 0;
   white-space: nowrap;
@@ -571,6 +577,13 @@ button:hover,
 .filter-toolbar {
   display: grid;
   gap: 10px;
+}
+
+.export-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .toggle-group {
