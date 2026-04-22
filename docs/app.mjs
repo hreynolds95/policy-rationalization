@@ -9,6 +9,7 @@ import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const state = {
   includeSampleData: false,
+  activeSourceTab: "demo",
   analysisView: {
     query: "",
     filter: "all",
@@ -181,6 +182,49 @@ function loadManualDocuments() {
     .filter((document) => document.text);
 }
 
+function countUrlEntries() {
+  return document
+    .querySelector("#urls")
+    .value.split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean).length;
+}
+
+function countManualEntries() {
+  return loadManualDocuments().length;
+}
+
+function updateSourceSummary() {
+  const target = document.querySelector("[data-source-summary]");
+  if (!target) {
+    return;
+  }
+
+  const fileCount = document.querySelector("#files").files.length;
+  const urlCount = countUrlEntries();
+  const manualCount = countManualEntries();
+  const sampleEnabled = state.includeSampleData;
+
+  const chips = [
+    `<span class="source-chip ${sampleEnabled ? "source-chip--active" : ""}">Demo library ${sampleEnabled ? "on" : "off"}</span>`,
+    `<span class="source-chip ${urlCount ? "source-chip--active" : ""}">${urlCount} URL${urlCount === 1 ? "" : "s"}</span>`,
+    `<span class="source-chip ${fileCount ? "source-chip--active" : ""}">${fileCount} file${fileCount === 1 ? "" : "s"}</span>`,
+    `<span class="source-chip ${manualCount ? "source-chip--active" : ""}">${manualCount} pasted doc${manualCount === 1 ? "" : "s"}</span>`,
+  ];
+
+  target.innerHTML = chips.join("");
+}
+
+function setActiveSourceTab(tab) {
+  state.activeSourceTab = tab;
+  document.querySelectorAll("[data-source-tab]").forEach((button) => {
+    button.classList.toggle("active", button.getAttribute("data-source-tab") === tab);
+  });
+  document.querySelectorAll("[data-source-panel]").forEach((panel) => {
+    panel.classList.toggle("is-active", panel.getAttribute("data-source-panel") === tab);
+  });
+}
+
 function renderEmptyResults() {
   const output = document.querySelector("[data-results]");
   output.innerHTML = `
@@ -267,6 +311,8 @@ function loadDemoSetup() {
   toggle.checked = true;
   state.includeSampleData = true;
   urlsField.value = SAMPLE_URLS.join("\n");
+  setActiveSourceTab("demo");
+  updateSourceSummary();
   renderStatus(
     "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
   );
@@ -290,6 +336,8 @@ function resetWorkspace() {
   state.analysisView.result = null;
   state.analysisView.issues = [];
 
+  setActiveSourceTab("demo");
+  updateSourceSummary();
   renderEmptyResults();
   renderStatus("Workspace reset. Add demo data or your own documents to begin again.");
 }
@@ -836,6 +884,7 @@ function wireDemoControls() {
 
   toggle.addEventListener("change", () => {
     state.includeSampleData = toggle.checked;
+    updateSourceSummary();
   });
 
   loadUrlsButton.addEventListener("click", () => {
@@ -859,10 +908,33 @@ function wireForm() {
   });
 }
 
+function wireSourceTabs() {
+  document.querySelectorAll("[data-source-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setActiveSourceTab(button.getAttribute("data-source-tab"));
+    });
+  });
+
+  document.querySelector("#urls").addEventListener("input", () => {
+    updateSourceSummary();
+  });
+
+  document.querySelector("#files").addEventListener("change", () => {
+    updateSourceSummary();
+  });
+
+  document.querySelector("[data-manual-documents]").addEventListener("input", () => {
+    updateSourceSummary();
+  });
+}
+
 function initialize() {
   setupManualDocuments();
   wireDemoControls();
   wireForm();
+  wireSourceTabs();
+  setActiveSourceTab(state.activeSourceTab);
+  updateSourceSummary();
   void loadDeploymentBadge();
   renderEmptyResults();
   renderStatus("Ready. Load the demo library, upload files, paste URLs, or add manual documents.");

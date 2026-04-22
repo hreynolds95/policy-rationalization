@@ -271,6 +271,40 @@ body {
   margin-top: 8px;
 }
 
+.workspace-switcher {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.toggle-group--full {
+  width: 100%;
+}
+
+.source-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.source-chip--active {
+  color: var(--accent);
+  border-color: var(--accent-3);
+}
+
 .toggle {
   display: flex;
   gap: 10px;
@@ -576,6 +610,14 @@ button:hover,
 .toggle-btn.active {
   background: var(--accent);
   color: var(--bg);
+}
+
+.source-panel {
+  display: none;
+}
+
+.source-panel.is-active {
+  display: block;
 }
 
 .results-hero {

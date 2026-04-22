@@ -98,10 +98,35 @@
             <p class="section-subtitle">
               Recommended order: load the demo setup for a walkthrough, or add your own URLs, files, and pasted text before running the analysis.
             </p>
+            <div class="workspace-switcher">
+              <div class="toggle-group toggle-group--full" data-source-tabs>
+                <button class="toggle-btn active" type="button" data-source-tab="demo">Demo</button>
+                <button class="toggle-btn" type="button" data-source-tab="urls">URLs</button>
+                <button class="toggle-btn" type="button" data-source-tab="files">Files</button>
+                <button class="toggle-btn" type="button" data-source-tab="manual">Manual</button>
+              </div>
+              <div class="source-summary" data-source-summary></div>
+            </div>
           </div>
 
-          <div class="panel__section">
-            <p class="eyebrow">A. Public URLs</p>
+          <div class="panel__section source-panel is-active" data-source-panel="demo">
+            <p class="eyebrow">Demo path</p>
+            <h3>Walk through the full workflow with one click</h3>
+            <p class="section-subtitle">
+              This path enables the sample library and loads illustrative sample URLs so your team can see the end-to-end review flow quickly.
+            </p>
+            <div class="flow-card">
+              <strong>Recommended for first-time reviewers</strong>
+              <p>Use this when you want fast feedback on the workflow before bringing in real policy content.</p>
+              <div class="control-row">
+                <button class="ghost-button" type="button" data-load-sample-urls>Load demo setup</button>
+                <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel__section source-panel" data-source-panel="urls">
+            <p class="eyebrow">URL imports</p>
             <h3>Paste URLs to public exports or pages</h3>
             <div class="field">
               <label for="urls">One URL per line</label>
@@ -115,8 +140,8 @@
             </div>
           </div>
 
-          <div class="panel__section">
-            <p class="eyebrow">B. File imports</p>
+          <div class="panel__section source-panel" data-source-panel="files">
+            <p class="eyebrow">File imports</p>
             <h3>Upload exported source material</h3>
             <div class="field">
               <label for="files">Accepted file types</label>
@@ -127,8 +152,8 @@
             </div>
           </div>
 
-          <div class="panel__section">
-            <p class="eyebrow">C. Manual paste</p>
+          <div class="panel__section source-panel" data-source-panel="manual">
+            <p class="eyebrow">Manual paste</p>
             <h3>Add documents directly</h3>
             <div class="manual-stack" data-manual-documents></div>
             <div class="control-row">
