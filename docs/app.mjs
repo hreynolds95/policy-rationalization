@@ -9,6 +9,12 @@ import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const state = {
   includeSampleData: false,
+  analysisView: {
+    query: "",
+    filter: "all",
+    result: null,
+    issues: [],
+  },
 };
 
 function createManualDocumentCard(title = "", text = "") {
@@ -179,11 +185,25 @@ function renderStatus(message, tone = "neutral") {
 }
 
 function renderResults(result, issues) {
+  state.analysisView.result = result;
+  state.analysisView.issues = issues;
+  renderAnalysisView();
+}
+
+function renderAnalysisView() {
   const output = document.querySelector("[data-results]");
+  const { result, issues, query, filter } = state.analysisView;
+  if (!result) {
+    output.innerHTML = "";
+    return;
+  }
+
   const summary = buildSummary(result);
-  const groupsHtml = buildGroupMarkup(result);
-  const pairsHtml = buildPairMarkup(result);
-  const issuesHtml = buildIssuesMarkup(issues);
+  const filtered = filterAnalysisView(result, issues, query, filter);
+  const groupsHtml = buildGroupMarkup(result, filtered.groups);
+  const pairsHtml = buildPairMarkup(result, filtered.edges);
+  const issuesHtml = buildIssuesMarkup(filtered.issues);
+  const documentsHtml = buildDocumentMarkup(filtered.documents);
   const strongestGroup = result.groups[0];
   const strongestCanonical = strongestGroup
     ? result.documents.find((document) => document.id === strongestGroup.recommendedPrimaryId)?.title || "None"
@@ -204,19 +224,46 @@ function renderResults(result, issues) {
           <div class="snapshot-kpis results-stats">
             <article class="panel snapshot-kpi-card">
               <span class="snapshot-kpi-label">Documents</span>
-              <span class="snapshot-kpi-value info">${result.documents.length}</span>
+              <span class="snapshot-kpi-value info">${filtered.documents.length}</span>
             </article>
             <article class="panel snapshot-kpi-card">
               <span class="snapshot-kpi-label">High-Similarity Pairs</span>
-              <span class="snapshot-kpi-value warning">${result.edges.length}</span>
+              <span class="snapshot-kpi-value warning">${filtered.edges.length}</span>
             </article>
             <article class="panel snapshot-kpi-card">
               <span class="snapshot-kpi-label">Duplicate Groups</span>
-              <span class="snapshot-kpi-value success">${result.groups.length}</span>
+              <span class="snapshot-kpi-value success">${filtered.groups.length}</span>
             </article>
           </div>
         </div>
       </div>
+
+      <section class="panel table-panel" id="analysisExplorer">
+        <div class="search-header">
+          <h3>Analysis explorer</h3>
+          <div class="search-bar">
+            <input
+              type="text"
+              id="analysisSearch"
+              placeholder="Search titles, sources, canonical candidates, or recommendations..."
+              autocomplete="off"
+              value="${escapeHtml(query)}"
+            />
+            <span class="search-count">${filtered.groups.length} groups / ${filtered.documents.length} docs</span>
+          </div>
+        </div>
+        <div class="filter-toolbar">
+          <div class="toggle-group" data-filter-group>
+            ${buildFilterButton("all", "All", filter)}
+            ${buildFilterButton("review", "Review flags", filter)}
+            ${buildFilterButton("ready", "Cleaner fits", filter)}
+            ${buildFilterButton("orphan", "Ungrouped docs", filter)}
+          </div>
+          <p class="section-subtitle">
+            Search and filters update the review surface without rerunning the analysis.
+          </p>
+        </div>
+      </section>
 
       <section class="panel table-panel collapsible" id="groupsSection">
         <div class="collapsible-header" data-toggle="groupsSection">
@@ -229,6 +276,21 @@ function renderResults(result, issues) {
         <div class="collapsible-body">
           <div class="results-section">
             ${groupsHtml}
+          </div>
+        </div>
+      </section>
+
+      <section class="panel table-panel collapsible collapsed" id="documentsSection">
+        <div class="collapsible-header" data-toggle="documentsSection">
+          <div class="collapsible-title-group">
+            <h3>Analyzed documents</h3>
+            <p class="section-subtitle">Searchable source list with cluster membership and review posture.</p>
+          </div>
+          <span class="collapse-icon"></span>
+        </div>
+        <div class="collapsible-body">
+          <div class="results-section">
+            ${documentsHtml}
           </div>
         </div>
       </section>
@@ -266,6 +328,7 @@ function renderResults(result, issues) {
   `;
 
   wireCollapsibles(output);
+  wireResultControls(output);
 }
 
 function buildSummary(result) {
@@ -281,12 +344,12 @@ function buildSummary(result) {
   return `${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. The recommendation keeps required structure intact and pushes brand scope, regulatory coverage, and procedural content into explicit review checks.`;
 }
 
-function buildGroupMarkup(result) {
-  if (!result.groups.length) {
+function buildGroupMarkup(result, groups) {
+  if (!groups.length) {
     return `<article class="result-card"><p>No duplicate groups were found at the current threshold.</p></article>`;
   }
 
-  return result.groups
+  return groups
     .map((group, index) => {
       const documents = group.documentIds
         .map((id) => result.documents.find((document) => document.id === id))
@@ -330,15 +393,15 @@ function buildGroupMarkup(result) {
     .join("");
 }
 
-function buildPairMarkup(result) {
-  if (!result.edges.length) {
+function buildPairMarkup(result, edges) {
+  if (!edges.length) {
     return `<article class="result-card"><p>No document pairs cleared the threshold.</p></article>`;
   }
 
   return `
     <article class="result-card">
       <ul class="pair-list">
-        ${result.edges
+        ${edges
           .slice(0, 12)
           .map((edge) => {
             const left = result.documents.find((document) => document.id === edge.leftId);
@@ -351,6 +414,37 @@ function buildPairMarkup(result) {
               </li>
             `;
           })
+          .join("")}
+      </ul>
+    </article>
+  `;
+}
+
+function buildDocumentMarkup(documents) {
+  if (!documents.length) {
+    return `<article class="result-card"><p>No documents match the current search and filter.</p></article>`;
+  }
+
+  return `
+    <article class="result-card">
+      <ul class="document-list">
+        ${documents
+          .map(
+            (document) => `
+              <li class="document-row">
+                <div class="document-row__main">
+                  <strong>${document.title}</strong>
+                  <span>${document.source}</span>
+                </div>
+                <div class="document-row__meta">
+                  <span class="doc-badge">${document.groupLabel}</span>
+                  <span class="doc-badge ${document.needsReview ? "doc-badge--warn" : "doc-badge--ok"}">
+                    ${document.needsReview ? "Review flags" : "No major flags"}
+                  </span>
+                </div>
+              </li>
+            `
+          )
           .join("")}
       </ul>
     </article>
@@ -377,12 +471,151 @@ function formatLabel(value) {
     .replace(/^./, (match) => match.toUpperCase());
 }
 
+function buildFilterButton(value, label, activeFilter) {
+  const activeClass = value === activeFilter ? "active" : "";
+  return `<button class="toggle-btn ${activeClass}" type="button" data-view-filter="${value}">${label}</button>`;
+}
+
+function groupHasReviewFlags(group) {
+  return (
+    group.checks.brandScopeCoverage === "missing" ||
+    group.checks.regulatoryReflection === "missing" ||
+    group.checks.proceduralContentDetected === "yes"
+  );
+}
+
+function buildDocumentViewModel(result) {
+  const groupsByDocumentId = new Map();
+  for (const group of result.groups) {
+    for (const documentId of group.documentIds) {
+      groupsByDocumentId.set(documentId, group);
+    }
+  }
+
+  return result.documents.map((document) => {
+    const group = groupsByDocumentId.get(document.id);
+    const isCanonical = group && group.recommendedPrimaryId === document.id;
+    const needsReview = group ? groupHasReviewFlags(group) : false;
+    return {
+      ...document,
+      groupLabel: group
+        ? isCanonical
+          ? "Canonical candidate"
+          : "Grouped document"
+        : "Ungrouped",
+      needsReview,
+      canonicalTitle: group
+        ? result.documents.find((candidate) => candidate.id === group.recommendedPrimaryId)?.title || ""
+        : "",
+    };
+  });
+}
+
+function matchesSearch(haystacks, query) {
+  if (!query) {
+    return true;
+  }
+  return haystacks.some((value) => value.toLowerCase().includes(query));
+}
+
+function filterAnalysisView(result, issues, rawQuery, filter) {
+  const query = rawQuery.trim().toLowerCase();
+  const documents = buildDocumentViewModel(result);
+  const visibleDocumentMap = new Map(documents.map((document) => [document.id, document]));
+
+  const filteredGroups = result.groups.filter((group) => {
+    const primary = result.documents.find((document) => document.id === group.recommendedPrimaryId);
+    const groupReview = groupHasReviewFlags(group);
+    const memberDocuments = group.documentIds.map((id) => visibleDocumentMap.get(id)).filter(Boolean);
+    const searchMatch = matchesSearch(
+      [
+        primary?.title || "",
+        group.recommendation,
+        ...memberDocuments.flatMap((document) => [document.title, document.source]),
+      ],
+      query
+    );
+    if (!searchMatch) {
+      return false;
+    }
+    if (filter === "review") {
+      return groupReview;
+    }
+    if (filter === "ready") {
+      return !groupReview;
+    }
+    if (filter === "orphan") {
+      return false;
+    }
+    return true;
+  });
+
+  const filteredDocuments = documents.filter((document) => {
+    const searchMatch = matchesSearch(
+      [document.title, document.source, document.groupLabel, document.canonicalTitle],
+      query
+    );
+    if (!searchMatch) {
+      return false;
+    }
+    if (filter === "review") {
+      return document.needsReview;
+    }
+    if (filter === "ready") {
+      return document.groupLabel !== "Ungrouped" && !document.needsReview;
+    }
+    if (filter === "orphan") {
+      return document.groupLabel === "Ungrouped";
+    }
+    return true;
+  });
+
+  const filteredDocumentIds = new Set(filteredDocuments.map((document) => document.id));
+  const filteredEdges = result.edges.filter(
+    (edge) => filteredDocumentIds.has(edge.leftId) && filteredDocumentIds.has(edge.rightId)
+  );
+  const filteredIssues = issues.filter((issue) => matchesSearch([issue], query));
+
+  return {
+    groups: filteredGroups,
+    documents: filteredDocuments,
+    edges: filteredEdges,
+    issues: filteredIssues,
+  };
+}
+
 function wireCollapsibles(scope) {
   scope.querySelectorAll("[data-toggle]").forEach((trigger) => {
     trigger.addEventListener("click", () => {
       const id = trigger.getAttribute("data-toggle");
       const section = scope.querySelector(`#${id}`);
       section?.classList.toggle("collapsed");
+    });
+  });
+}
+
+function wireResultControls(scope) {
+  const searchInput = scope.querySelector("#analysisSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", (event) => {
+      state.analysisView.query = event.target.value;
+      const caret = event.target.selectionStart ?? state.analysisView.query.length;
+      renderAnalysisView();
+      requestAnimationFrame(() => {
+        const nextInput = document.querySelector("#analysisSearch");
+        if (!nextInput) {
+          return;
+        }
+        nextInput.focus();
+        nextInput.setSelectionRange(caret, caret);
+      });
+    });
+  }
+
+  scope.querySelectorAll("[data-view-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.analysisView.filter = button.getAttribute("data-view-filter");
+      renderAnalysisView();
     });
   });
 }
@@ -419,6 +652,8 @@ async function runAnalysis() {
   }
 
   const result = analyzeDocuments(documents, threshold);
+  state.analysisView.query = "";
+  state.analysisView.filter = "all";
   renderResults(result, issues);
   renderStatus(`Analyzed ${result.documents.length} documents with a ${threshold.toFixed(2)} similarity threshold.`, "success");
 }
