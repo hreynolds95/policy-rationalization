@@ -1,4 +1,5 @@
 import {
+  DOCUMENT_TYPES,
   analyzeDocuments,
   extractTextFromHtml,
   isGoogleAuthPage,
@@ -13,6 +14,9 @@ const state = {
   analysisView: {
     query: "",
     filter: "all",
+    documents: [],
+    threshold: 0.45,
+    levelOverrides: {},
     result: null,
     issues: [],
   },
@@ -391,6 +395,9 @@ function resetWorkspace() {
 
   state.analysisView.query = "";
   state.analysisView.filter = "all";
+  state.analysisView.documents = [];
+  state.analysisView.threshold = 0.45;
+  state.analysisView.levelOverrides = {};
   state.analysisView.result = null;
   state.analysisView.issues = [];
 
@@ -669,7 +676,9 @@ function buildLevelMarkup(documents) {
                   ${document.documentLevel.levelIssues.length ? `<p class="document-note">${document.documentLevel.levelIssues.join("; ")}</p>` : ""}
                 </div>
                 <div class="document-row__meta">
+                  ${buildDocumentTypeOverrideControl(document)}
                   <span class="doc-badge">${document.documentLevel.inferredType}</span>
+                  ${document.documentLevel.isOverrideApplied ? `<span class="doc-badge">Manual override</span>` : ""}
                   <span class="doc-badge ${document.documentLevel.levelFit === "aligned" ? "doc-badge--ok" : "doc-badge--warn"}">
                     ${document.documentLevel.levelFit}
                   </span>
@@ -776,7 +785,9 @@ function buildDocumentMarkup(documents) {
                   <span>${document.source}</span>
                 </div>
                 <div class="document-row__meta">
+                  ${buildDocumentTypeOverrideControl(document)}
                   <span class="doc-badge">${document.documentLevel.inferredType}</span>
+                  ${document.documentLevel.isOverrideApplied ? `<span class="doc-badge">Manual override</span>` : ""}
                   <span class="doc-badge">${document.groupLabel}</span>
                   <span class="doc-badge ${document.needsReview ? "doc-badge--warn" : "doc-badge--ok"}">
                     ${document.needsReview ? "Review flags" : "No major flags"}
@@ -805,10 +816,37 @@ function buildIssuesMarkup(issues) {
   `;
 }
 
+function buildDocumentTypeOverrideControl(document) {
+  const overrideType = document.documentLevel.overrideType || "";
+  const currentLabel = toTitleCase(document.documentLevel.autoInferredType);
+  const selectId = `doc-type-${String(document.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+  return `
+    <label class="doc-type-control" for="${selectId}">
+      <span class="doc-type-control__label">Review level</span>
+      <select
+        class="doc-type-select"
+        id="${selectId}"
+        data-doc-type-select
+        data-document-id="${escapeHtml(String(document.id))}"
+      >
+        <option value="">Auto: ${currentLabel}</option>
+        ${DOCUMENT_TYPES.map(
+          (type) => `<option value="${type}" ${overrideType === type ? "selected" : ""}>${toTitleCase(type)}</option>`
+        ).join("")}
+      </select>
+    </label>
+  `;
+}
+
 function formatLabel(value) {
   return value
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (match) => match.toUpperCase());
+}
+
+function toTitleCase(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function buildFilterButton(value, label, activeFilter) {
@@ -995,6 +1033,24 @@ function wireResultControls(scope) {
       });
     });
   });
+
+  scope.querySelectorAll("[data-doc-type-select]").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      const documentId = event.target.getAttribute("data-document-id");
+      const nextType = event.target.value;
+      const sectionId = event.target.closest(".collapsible")?.id || "levelSection";
+      if (nextType) {
+        state.analysisView.levelOverrides[documentId] = nextType;
+      } else {
+        delete state.analysisView.levelOverrides[documentId];
+      }
+      rerunAnalysisWithOverrides();
+      requestAnimationFrame(() => {
+        revealWorkflowSection(sectionId);
+        focusDocumentTypeSelect(documentId);
+      });
+    });
+  });
 }
 
 function revealWorkflowSection(targetId) {
@@ -1004,6 +1060,26 @@ function revealWorkflowSection(targetId) {
   }
   section.classList.remove("collapsed");
   section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function focusDocumentTypeSelect(documentId) {
+  const select = [...document.querySelectorAll("[data-doc-type-select]")].find(
+    (candidate) => candidate.getAttribute("data-document-id") === documentId
+  );
+  select?.focus();
+}
+
+function rerunAnalysisWithOverrides() {
+  if (!state.analysisView.documents.length) {
+    return;
+  }
+  const nextResult = analyzeDocuments(
+    state.analysisView.documents,
+    state.analysisView.threshold,
+    state.analysisView.levelOverrides
+  );
+  state.analysisView.result = nextResult;
+  renderAnalysisView();
 }
 
 async function runAnalysis() {
@@ -1037,7 +1113,14 @@ async function runAnalysis() {
     return;
   }
 
-  const result = analyzeDocuments(documents, threshold);
+  state.analysisView.documents = documents;
+  state.analysisView.threshold = threshold;
+  const validDocumentIds = new Set(documents.map((document) => String(document.id)));
+  state.analysisView.levelOverrides = Object.fromEntries(
+    Object.entries(state.analysisView.levelOverrides).filter(([documentId]) => validDocumentIds.has(documentId))
+  );
+
+  const result = analyzeDocuments(documents, threshold, state.analysisView.levelOverrides);
   state.analysisView.query = "";
   state.analysisView.filter = "all";
   renderResults(result, issues);

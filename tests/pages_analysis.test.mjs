@@ -106,3 +106,30 @@ test("analyzeDocuments exposes mixed-level groups for review", () => {
   assert.equal(result.groups[0].checks.documentLevelConsistency, "mixed-level");
   assert.equal(result.groups[0].checks.documentLevelFit, "review-needed");
 });
+
+test("analyzeDocuments supports reviewer document type overrides", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Data Retention Policy",
+        source: "manual://a",
+        text: "policy purpose scope applies must retain records across brands and legal entities",
+      },
+      {
+        id: "b",
+        title: "Data Retention Procedure",
+        source: "manual://b",
+        text: "data retention procedure workflow for records retention. step 1 identify records. step 2 archive records.",
+      },
+    ],
+    0.05,
+    { b: "policy" }
+  );
+
+  const overridden = result.documents.find((document) => document.id === "b");
+  assert.equal(overridden.documentLevel.autoInferredType, "procedure");
+  assert.equal(overridden.documentLevel.inferredType, "policy");
+  assert.equal(overridden.documentLevel.overrideType, "policy");
+  assert.equal(result.groups[0].checks.documentLevelConsistency, "consistent");
+});

@@ -34,6 +34,8 @@ const PROCEDURE_TERMS = [
   "steps",
 ];
 
+export const DOCUMENT_TYPES = ["policy", "standard", "procedure"];
+
 export function tokenize(text) {
   return (text.match(TOKEN_RE) || []).map((token) => token.toLowerCase());
 }
@@ -150,7 +152,7 @@ function countMatches(text, terms) {
   return terms.reduce((sum, term) => sum + (lower.includes(term) ? 1 : 0), 0);
 }
 
-export function evaluateDocumentLevel(document) {
+export function evaluateDocumentLevel(document, forcedType = "") {
   const title = document.title.toLowerCase();
   const text = document.text.toLowerCase();
   const combined = `${title}\n${text}`;
@@ -165,7 +167,8 @@ export function evaluateDocumentLevel(document) {
     procedure: titleProcedure + countMatches(combined, PROCEDURE_TERMS),
   };
 
-  const inferredType = Object.entries(scores).sort((left, right) => right[1] - left[1])[0][0];
+  const autoInferredType = Object.entries(scores).sort((left, right) => right[1] - left[1])[0][0];
+  const inferredType = DOCUMENT_TYPES.includes(forcedType) ? forcedType : autoInferredType;
   const policySignals = countMatches(combined, POLICY_TERMS);
   const standardSignals = countMatches(combined, STANDARD_TERMS);
   const procedureSignals = countMatches(combined, PROCEDURE_TERMS);
@@ -208,6 +211,9 @@ export function evaluateDocumentLevel(document) {
 
   return {
     inferredType,
+    autoInferredType,
+    overrideType: DOCUMENT_TYPES.includes(forcedType) ? forcedType : "",
+    isOverrideApplied: DOCUMENT_TYPES.includes(forcedType),
     levelFit,
     levelIssues,
     signalCounts: {
@@ -342,7 +348,7 @@ export function buildDuplicateGroups(documents, edges) {
   );
 }
 
-export function analyzeDocuments(documents, threshold = 0.45) {
+export function analyzeDocuments(documents, threshold = 0.45, levelOverrides = {}) {
   const normalizedDocuments = documents.map((document, index) => ({
     id: document.id ?? index,
     title: document.title || `Document ${index + 1}`,
@@ -351,7 +357,7 @@ export function analyzeDocuments(documents, threshold = 0.45) {
   }));
   const documentsWithLevel = normalizedDocuments.map((document) => ({
     ...document,
-    documentLevel: evaluateDocumentLevel(document),
+    documentLevel: evaluateDocumentLevel(document, levelOverrides[document.id] || ""),
   }));
   const edges = computeSimilarityEdges(documentsWithLevel, threshold);
   const groups = buildDuplicateGroups(documentsWithLevel, edges);
