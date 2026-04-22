@@ -76,12 +76,17 @@ function setupManualDocuments() {
   ensureMinimumManualCards();
 }
 
-async function loadDocumentsFromFiles(fileList) {
+async function loadDocumentsFromFiles(fileList, onProgress = () => {}) {
   const files = [...fileList];
   const documents = [];
   const issues = [];
 
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
+    onProgress({
+      current: index + 1,
+      total: files.length,
+      label: file.name,
+    });
     const text = await file.text();
     if (file.name.toLowerCase().endsWith(".csv")) {
       const csvDocuments = parseCsv(text, file.name);
@@ -109,7 +114,7 @@ async function loadDocumentsFromFiles(fileList) {
   return { documents, issues };
 }
 
-async function loadDocumentsFromUrls(rawUrls) {
+async function loadDocumentsFromUrls(rawUrls, onProgress = () => {}) {
   const urls = rawUrls
     .split("\n")
     .map((value) => value.trim())
@@ -118,7 +123,12 @@ async function loadDocumentsFromUrls(rawUrls) {
   const documents = [];
   const issues = [];
 
-  for (const originalUrl of urls) {
+  for (const [index, originalUrl] of urls.entries()) {
+    onProgress({
+      current: index + 1,
+      total: urls.length,
+      label: originalUrl,
+    });
     const url = normalizeGoogleExportUrl(originalUrl);
     try {
       const response = await fetch(url);
@@ -162,6 +172,10 @@ async function loadDocumentsFromUrls(rawUrls) {
   }
 
   return { documents, issues };
+}
+
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function deriveTitleFromUrl(url) {
@@ -313,6 +327,147 @@ function renderStatus(message, tone = "neutral") {
   const status = document.querySelector("[data-status]");
   status.textContent = message;
   status.dataset.tone = tone;
+}
+
+export function buildAnalysisProgressView(progress) {
+  const sourceParts = [];
+  if (progress.sampleCount) {
+    sourceParts.push(pluralize(progress.sampleCount, "demo doc"));
+  }
+  if (progress.manualCount) {
+    sourceParts.push(pluralize(progress.manualCount, "pasted doc"));
+  }
+  if (progress.fileCount) {
+    sourceParts.push(pluralize(progress.fileCount, "file"));
+  }
+  if (progress.urlCount) {
+    sourceParts.push(pluralize(progress.urlCount, "URL"));
+  }
+
+  const sourceSummary = sourceParts.length ? sourceParts.join(", ") : "no sources";
+  const totalStartingSources =
+    progress.sampleCount + progress.manualCount + progress.fileCount + progress.urlCount;
+
+  const stepState = (stage) => {
+    const order = ["collect", "files", "urls", "analysis", "complete"];
+    const currentIndex = order.indexOf(progress.phase);
+    const stageIndex = order.indexOf(stage);
+    if (stage === "files" && !progress.fileCount) {
+      return "skipped";
+    }
+    if (stage === "urls" && !progress.urlCount) {
+      return "skipped";
+    }
+    if (currentIndex > stageIndex) {
+      return "complete";
+    }
+    if (currentIndex === stageIndex) {
+      return "active";
+    }
+    return "pending";
+  };
+
+  const detailByPhase = {
+    collect: `Preparing ${pluralize(totalStartingSources, "starting source")} across ${sourceSummary}.`,
+    files: progress.fileCount
+      ? `Parsing file ${progress.filesProcessed + 1} of ${progress.fileCount}: ${progress.currentFileName || "current file"}`
+      : "No files to parse in this run.",
+    urls: progress.urlCount
+      ? `Fetching URL ${progress.urlsProcessed + 1} of ${progress.urlCount}: ${progress.currentUrlLabel || "current URL"}`
+      : "No URLs to fetch in this run.",
+    analysis: `Running document-level evaluation and consolidation analysis across ${pluralize(progress.loadedDocumentCount, "document")}.`,
+    complete: `Analysis finished for ${pluralize(progress.loadedDocumentCount, "document")}.`,
+  };
+
+  return {
+    headline:
+      progress.phase === "analysis"
+        ? "Running rationalization analysis"
+        : progress.phase === "urls"
+          ? "Fetching URL content"
+          : progress.phase === "files"
+            ? "Parsing uploaded files"
+            : "Preparing analysis",
+    detail: detailByPhase[progress.phase] || detailByPhase.collect,
+    steps: [
+      {
+        label: "Gather inputs",
+        state: stepState("collect"),
+        detail: sourceSummary,
+      },
+      {
+        label: "Parse files",
+        state: stepState("files"),
+        detail: progress.fileCount
+          ? `${progress.filesProcessed}/${progress.fileCount} processed`
+          : "No uploaded files",
+      },
+      {
+        label: "Fetch URLs",
+        state: stepState("urls"),
+        detail: progress.urlCount
+          ? `${progress.urlsProcessed}/${progress.urlCount} fetched`
+          : "No URLs queued",
+      },
+      {
+        label: "Compute analysis",
+        state: stepState("analysis"),
+        detail:
+          progress.phase === "analysis" || progress.phase === "complete"
+            ? `${pluralize(progress.loadedDocumentCount, "document")} ready for scoring`
+            : "Waiting for source collection",
+      },
+    ],
+  };
+}
+
+function renderProgressStatus(progress) {
+  const status = document.querySelector("[data-status]");
+  const view = buildAnalysisProgressView(progress);
+  status.dataset.tone = "loading";
+  status.innerHTML = `
+    <div class="status__eyebrow">Analysis in progress</div>
+    <strong class="status__headline">${escapeHtml(view.headline)}</strong>
+    <p class="status__detail">${escapeHtml(view.detail)}</p>
+    <ul class="status__steps">
+      ${view.steps
+        .map(
+          (step) => `
+            <li class="status__step status__step--${step.state}">
+              <span class="status__step-dot" aria-hidden="true"></span>
+              <div>
+                <strong>${escapeHtml(step.label)}</strong>
+                <span>${escapeHtml(step.detail)}</span>
+              </div>
+            </li>
+          `
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+function setAnalysisBusy(isBusy) {
+  const selectors = [
+    "[data-analyze]",
+    "[data-run-demo]",
+    "[data-load-sample-urls]",
+    "[data-reset-workspace]",
+    "[data-source-tab]",
+    "#include-sample",
+    "#threshold",
+    "#threshold-slider",
+    "#urls",
+    "#files",
+    "[data-add-manual]",
+    ".manual-card__title",
+    ".manual-card__text",
+    "[data-remove-manual]",
+  ];
+
+  document.querySelectorAll(selectors.join(",")).forEach((node) => {
+    node.disabled = isBusy;
+  });
 }
 
 function formatDeploymentTimestamp(value) {
@@ -1294,48 +1449,98 @@ function exportCurrentView(format) {
 }
 
 async function runAnalysis() {
-  renderStatus("Collecting documents and running rationalization analysis...");
   const threshold = Number(document.querySelector("#threshold").value || "0.45");
   const urlsValue = document.querySelector("#urls").value;
   const fileInput = document.querySelector("#files");
-  const issues = [];
-
   const manualDocuments = loadManualDocuments();
-  const [fileResult, urlResult] = await Promise.all([
-    loadDocumentsFromFiles(fileInput.files),
-    loadDocumentsFromUrls(urlsValue),
-  ]);
+  const sampleDocuments = state.includeSampleData ? SAMPLE_DOCUMENTS : [];
+  const urlCount = urlsValue
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean).length;
+  const progress = {
+    phase: "collect",
+    sampleCount: sampleDocuments.length,
+    manualCount: manualDocuments.length,
+    fileCount: fileInput.files.length,
+    urlCount,
+    filesProcessed: 0,
+    urlsProcessed: 0,
+    currentFileName: "",
+    currentUrlLabel: "",
+    loadedDocumentCount: sampleDocuments.length + manualDocuments.length,
+  };
 
-  issues.push(...fileResult.issues, ...urlResult.issues);
+  setAnalysisBusy(true);
+  renderProgressStatus(progress);
 
-  const documents = [
-    ...(state.includeSampleData ? SAMPLE_DOCUMENTS : []),
-    ...manualDocuments,
-    ...fileResult.documents,
-    ...urlResult.documents,
-  ];
+  try {
+    const issues = [];
 
-  if (documents.length < 2) {
-    renderStatus(
-      "Add at least two documents. The quickest path is the built-in demo library or a small file upload set.",
-      "warning"
+    progress.phase = "files";
+    renderProgressStatus(progress);
+    const fileResult = await loadDocumentsFromFiles(fileInput.files, ({ current, label }) => {
+      progress.filesProcessed = current - 1;
+      progress.currentFileName = label;
+      renderProgressStatus(progress);
+    });
+    progress.filesProcessed = progress.fileCount;
+    progress.loadedDocumentCount += fileResult.documents.length;
+    renderProgressStatus(progress);
+
+    progress.phase = "urls";
+    renderProgressStatus(progress);
+    const urlResult = await loadDocumentsFromUrls(urlsValue, ({ current, label }) => {
+      progress.urlsProcessed = current - 1;
+      progress.currentUrlLabel = label;
+      renderProgressStatus(progress);
+    });
+    progress.urlsProcessed = urlCount;
+    progress.loadedDocumentCount += urlResult.documents.length;
+    renderProgressStatus(progress);
+
+    issues.push(...fileResult.issues, ...urlResult.issues);
+
+    const documents = [
+      ...sampleDocuments,
+      ...manualDocuments,
+      ...fileResult.documents,
+      ...urlResult.documents,
+    ];
+
+    if (documents.length < 2) {
+      renderStatus(
+        "Add at least two documents. The quickest path is the built-in demo library or a small file upload set.",
+        "warning"
+      );
+      renderEmptyResults();
+      return;
+    }
+
+    progress.phase = "analysis";
+    progress.loadedDocumentCount = documents.length;
+    renderProgressStatus(progress);
+
+    state.analysisView.documents = documents;
+    state.analysisView.threshold = threshold;
+    const validDocumentIds = new Set(documents.map((document) => String(document.id)));
+    state.analysisView.levelOverrides = Object.fromEntries(
+      Object.entries(state.analysisView.levelOverrides).filter(([documentId]) => validDocumentIds.has(documentId))
     );
-    renderEmptyResults();
-    return;
+
+    const result = analyzeDocuments(documents, threshold, state.analysisView.levelOverrides);
+    state.analysisView.query = "";
+    state.analysisView.filter = "all";
+    renderResults(result, issues);
+    renderStatus(
+      `Analyzed ${result.documents.length} documents with a ${threshold.toFixed(2)} similarity threshold.`,
+      "success"
+    );
+  } catch (error) {
+    renderStatus(`Analysis could not finish: ${error.message}`, "warning");
+  } finally {
+    setAnalysisBusy(false);
   }
-
-  state.analysisView.documents = documents;
-  state.analysisView.threshold = threshold;
-  const validDocumentIds = new Set(documents.map((document) => String(document.id)));
-  state.analysisView.levelOverrides = Object.fromEntries(
-    Object.entries(state.analysisView.levelOverrides).filter(([documentId]) => validDocumentIds.has(documentId))
-  );
-
-  const result = analyzeDocuments(documents, threshold, state.analysisView.levelOverrides);
-  state.analysisView.query = "";
-  state.analysisView.filter = "all";
-  renderResults(result, issues);
-  renderStatus(`Analyzed ${result.documents.length} documents with a ${threshold.toFixed(2)} similarity threshold.`, "success");
 }
 
 function wireDemoControls() {
