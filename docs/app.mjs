@@ -215,6 +215,63 @@ function updateSourceSummary() {
   target.innerHTML = chips.join("");
 }
 
+function computeWorkspaceReadiness() {
+  const urlCount = countUrlEntries();
+  const fileCount = document.querySelector("#files").files.length;
+  const manualCount = countManualEntries();
+  const estimatedDocuments = (state.includeSampleData ? SAMPLE_DOCUMENTS.length : 0) + urlCount + fileCount + manualCount;
+
+  let tone = "warning";
+  let headline = "Add at least two documents to start";
+  let detail = "The analysis needs at least two documents. The fastest path is the demo setup or a small file upload set.";
+
+  if (estimatedDocuments >= 2) {
+    tone = "ready";
+    headline = "Ready to run analysis";
+    detail =
+      "You have enough source material to run the workflow. The app will start with document-level evaluation, then move into duplicate groups and detailed review surfaces.";
+  } else if (estimatedDocuments === 1) {
+    headline = "Almost ready";
+    detail = "One document is loaded. Add one more source so the rationalization analysis can compare documents meaningfully.";
+  }
+
+  return {
+    tone,
+    headline,
+    detail,
+    estimatedDocuments,
+    sampleEnabled: state.includeSampleData,
+    urlCount,
+    fileCount,
+    manualCount,
+  };
+}
+
+function renderReadinessCard() {
+  const target = document.querySelector("[data-readiness-card]");
+  if (!target) {
+    return;
+  }
+
+  const readiness = computeWorkspaceReadiness();
+  target.className = `readiness-card readiness-card--${readiness.tone}`;
+  target.innerHTML = `
+    <div class="readiness-card__header">
+      <strong>${readiness.headline}</strong>
+      <span class="doc-badge ${readiness.tone === "ready" ? "doc-badge--ok" : "doc-badge--warn"}">
+        ${readiness.estimatedDocuments} estimated doc${readiness.estimatedDocuments === 1 ? "" : "s"}
+      </span>
+    </div>
+    <p>${readiness.detail}</p>
+    <ul class="readiness-list">
+      <li>Demo library: ${readiness.sampleEnabled ? "included" : "off"}</li>
+      <li>URLs loaded: ${readiness.urlCount}</li>
+      <li>Files selected: ${readiness.fileCount}</li>
+      <li>Manual docs with text: ${readiness.manualCount}</li>
+    </ul>
+  `;
+}
+
 function setActiveSourceTab(tab) {
   state.activeSourceTab = tab;
   document.querySelectorAll("[data-source-tab]").forEach((button) => {
@@ -313,6 +370,7 @@ function loadDemoSetup() {
   urlsField.value = SAMPLE_URLS.join("\n");
   setActiveSourceTab("demo");
   updateSourceSummary();
+  renderReadinessCard();
   renderStatus(
     "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
   );
@@ -338,6 +396,7 @@ function resetWorkspace() {
 
   setActiveSourceTab("demo");
   updateSourceSummary();
+  renderReadinessCard();
   renderEmptyResults();
   renderStatus("Workspace reset. Add demo data or your own documents to begin again.");
 }
@@ -885,6 +944,7 @@ function wireDemoControls() {
   toggle.addEventListener("change", () => {
     state.includeSampleData = toggle.checked;
     updateSourceSummary();
+    renderReadinessCard();
   });
 
   loadUrlsButton.addEventListener("click", () => {
@@ -917,14 +977,17 @@ function wireSourceTabs() {
 
   document.querySelector("#urls").addEventListener("input", () => {
     updateSourceSummary();
+    renderReadinessCard();
   });
 
   document.querySelector("#files").addEventListener("change", () => {
     updateSourceSummary();
+    renderReadinessCard();
   });
 
   document.querySelector("[data-manual-documents]").addEventListener("input", () => {
     updateSourceSummary();
+    renderReadinessCard();
   });
 }
 
@@ -935,6 +998,7 @@ function initialize() {
   wireSourceTabs();
   setActiveSourceTab(state.activeSourceTab);
   updateSourceSummary();
+  renderReadinessCard();
   void loadDeploymentBadge();
   renderEmptyResults();
   renderStatus("Ready. Load the demo library, upload files, paste URLs, or add manual documents.");
