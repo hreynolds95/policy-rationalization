@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compliance-rationalizer"
+version = "0.1.0"
+description = "Identify redundant compliance policy and standard-library documents for consolidation"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Rationalization Team" }]
+
+[project.scripts]
+compliance-rationalizer = "compliance_rationalizer.cli:main"
+compliance-rationalizer-web = "compliance_rationalizer.webapp:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"
