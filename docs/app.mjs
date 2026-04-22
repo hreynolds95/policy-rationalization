@@ -484,79 +484,123 @@ function renderAnalysisView() {
         </div>
       </section>
 
-      <section class="panel table-panel collapsible" id="levelSection">
-        <div class="collapsible-header" data-toggle="levelSection">
-          <div class="collapsible-title-group">
-            <h3>Step 1: document level evaluation</h3>
-            <p class="section-subtitle">Check whether each document is operating at the right level of requirements before consolidation.</p>
-          </div>
-          <span class="collapse-icon"></span>
-        </div>
-        <div class="collapsible-body">
-          <div class="results-section">
-            ${levelHtml}
+      <section class="workflow-panel">
+        <div class="panel table-panel workflow-intro">
+          <div class="results-section-heading">
+            <p class="eyebrow">Review sequence</p>
+            <h3>Work through the rationalization in order</h3>
+            <p class="section-subtitle">Start with document level fit, then move into consolidation candidates, supporting evidence, and import blockers.</p>
           </div>
         </div>
-      </section>
 
-      <section class="panel table-panel collapsible" id="groupsSection">
-        <div class="collapsible-header" data-toggle="groupsSection">
-          <div class="collapsible-title-group">
-            <h3>Recommended consolidation groups</h3>
-            <p class="section-subtitle">Canonical candidates with review checks and source membership.</p>
+        <article class="workflow-step panel table-panel collapsible" id="levelSection">
+          <div class="workflow-step__rail">
+            <span class="workflow-step__number">1</span>
+            <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
-          <span class="collapse-icon"></span>
-        </div>
-        <div class="collapsible-body">
-          <div class="results-section">
-            ${groupsHtml}
+          <div class="workflow-step__content">
+            <div class="collapsible-header" data-toggle="levelSection">
+              <div class="collapsible-title-group">
+                <p class="workflow-step__eyebrow">Step 1</p>
+                <h3>Document level evaluation</h3>
+                <p class="section-subtitle">Check whether each document is operating at the right level of requirements before consolidation.</p>
+              </div>
+              <span class="collapse-icon"></span>
+            </div>
+            <div class="collapsible-body">
+              <div class="results-section">
+                ${levelHtml}
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </article>
 
-      <section class="panel table-panel collapsible collapsed" id="documentsSection">
-        <div class="collapsible-header" data-toggle="documentsSection">
-          <div class="collapsible-title-group">
-            <h3>Analyzed documents</h3>
-            <p class="section-subtitle">Searchable source list with cluster membership and review posture.</p>
+        <article class="workflow-step panel table-panel collapsible" id="groupsSection">
+          <div class="workflow-step__rail">
+            <span class="workflow-step__number">2</span>
+            <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
-          <span class="collapse-icon"></span>
-        </div>
-        <div class="collapsible-body">
-          <div class="results-section">
-            ${documentsHtml}
+          <div class="workflow-step__content">
+            <div class="collapsible-header" data-toggle="groupsSection">
+              <div class="collapsible-title-group">
+                <p class="workflow-step__eyebrow">Step 2</p>
+                <h3>Consolidation groups</h3>
+                <p class="section-subtitle">Review canonical candidates, review checks, and source membership for each duplicate cluster.</p>
+              </div>
+              <span class="collapse-icon"></span>
+            </div>
+            <div class="collapsible-body">
+              <div class="results-section">
+                ${groupsHtml}
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </article>
 
-      <section class="panel table-panel collapsible collapsed" id="pairsSection">
-        <div class="collapsible-header" data-toggle="pairsSection">
-          <div class="collapsible-title-group">
-            <h3>Top similarity pairs</h3>
-            <p class="section-subtitle">Fast triage view for overlapping documents that may not form a full cluster.</p>
+        <article class="workflow-step panel table-panel collapsible collapsed" id="documentsSection">
+          <div class="workflow-step__rail">
+            <span class="workflow-step__number">3</span>
+            <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
-          <span class="collapse-icon"></span>
-        </div>
-        <div class="collapsible-body">
-          <div class="results-section">
-            ${pairsHtml}
+          <div class="workflow-step__content">
+            <div class="collapsible-header" data-toggle="documentsSection">
+              <div class="collapsible-title-group">
+                <p class="workflow-step__eyebrow">Step 3</p>
+                <h3>Document review surface</h3>
+                <p class="section-subtitle">Browse the analyzed source set with cluster membership and inherited review posture.</p>
+              </div>
+              <span class="collapse-icon"></span>
+            </div>
+            <div class="collapsible-body">
+              <div class="results-section">
+                ${documentsHtml}
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </article>
 
-      <section class="panel table-panel collapsible collapsed" id="issuesSection">
-        <div class="collapsible-header" data-toggle="issuesSection">
-          <div class="collapsible-title-group">
-            <h3>Import issues</h3>
-            <p class="section-subtitle">CORS, authentication, parsing, and empty-content warnings.</p>
+        <article class="workflow-step panel table-panel collapsible collapsed" id="pairsSection">
+          <div class="workflow-step__rail">
+            <span class="workflow-step__number">4</span>
+            <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
-          <span class="collapse-icon"></span>
-        </div>
-        <div class="collapsible-body">
-          <div class="results-section">
-            ${issuesHtml}
+          <div class="workflow-step__content">
+            <div class="collapsible-header" data-toggle="pairsSection">
+              <div class="collapsible-title-group">
+                <p class="workflow-step__eyebrow">Step 4</p>
+                <h3>Pair overlap triage</h3>
+                <p class="section-subtitle">Use the strongest similarity pairs to spot near-duplicates that may not form a full cluster yet.</p>
+              </div>
+              <span class="collapse-icon"></span>
+            </div>
+            <div class="collapsible-body">
+              <div class="results-section">
+                ${pairsHtml}
+              </div>
+            </div>
           </div>
-        </div>
+        </article>
+
+        <article class="workflow-step workflow-step--last panel table-panel collapsible collapsed" id="issuesSection">
+          <div class="workflow-step__rail">
+            <span class="workflow-step__number">5</span>
+          </div>
+          <div class="workflow-step__content">
+            <div class="collapsible-header" data-toggle="issuesSection">
+              <div class="collapsible-title-group">
+                <p class="workflow-step__eyebrow">Step 5</p>
+                <h3>Import issues and blockers</h3>
+                <p class="section-subtitle">Review CORS, authentication, parsing, and empty-content warnings that could affect confidence in the analysis.</p>
+              </div>
+              <span class="collapse-icon"></span>
+            </div>
+            <div class="collapsible-body">
+              <div class="results-section">
+                ${issuesHtml}
+              </div>
+            </div>
+          </div>
+        </article>
       </section>
     </section>
   `;
