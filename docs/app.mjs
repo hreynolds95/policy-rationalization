@@ -17,6 +17,7 @@ const state = {
     documents: [],
     threshold: 0.45,
     levelOverrides: {},
+    currentWorkflowStep: "levelSection",
     usedSampleData: false,
     result: null,
     issues: [],
@@ -25,6 +26,14 @@ const state = {
 
 const DEPLOYMENT_API_URL =
   "https://api.github.com/repos/hreynolds95/policy-rationalization/pages/builds/latest";
+
+const WORKFLOW_SEQUENCE = [
+  "levelSection",
+  "groupsSection",
+  "documentsSection",
+  "pairsSection",
+  "issuesSection",
+];
 
 function createManualDocumentCard(title = "", text = "") {
   const wrapper = document.createElement("article");
@@ -245,6 +254,18 @@ export function buildDemoBannerContent(sampleCount, context = "workspace") {
     body: `${descriptor} Built-in sample documents and example URLs are intended for walkthroughs and quick feedback, not policy decisions.`,
     detail: `${pluralize(sampleCount, "sample document")} available in the bundled library.`,
   };
+}
+
+export function buildWorkflowStepStates(currentStepId = "levelSection") {
+  const fallbackStep = WORKFLOW_SEQUENCE.includes(currentStepId) ? currentStepId : WORKFLOW_SEQUENCE[0];
+  const activeIndex = WORKFLOW_SEQUENCE.indexOf(fallbackStep);
+
+  return Object.fromEntries(
+    WORKFLOW_SEQUENCE.map((stepId, index) => [
+      stepId,
+      index < activeIndex ? "complete" : index === activeIndex ? "current" : "upcoming",
+    ])
+  );
 }
 
 function renderDemoBanner() {
@@ -589,6 +610,7 @@ function resetWorkspace() {
   state.analysisView.documents = [];
   state.analysisView.threshold = 0.45;
   state.analysisView.levelOverrides = {};
+  state.analysisView.currentWorkflowStep = "levelSection";
   state.analysisView.usedSampleData = false;
   state.analysisView.result = null;
   state.analysisView.issues = [];
@@ -615,8 +637,13 @@ function renderAnalysisView() {
     return;
   }
 
+  if (!WORKFLOW_SEQUENCE.includes(state.analysisView.currentWorkflowStep)) {
+    state.analysisView.currentWorkflowStep = WORKFLOW_SEQUENCE[0];
+  }
+
   const summary = buildSummary(result);
   const filtered = filterAnalysisView(result, issues, query, filter);
+  const workflowStates = buildWorkflowStepStates(state.analysisView.currentWorkflowStep);
   const levelHtml = buildLevelMarkup(filtered.documents);
   const groupsHtml = buildGroupMarkup(result, filtered.groups);
   const pairsHtml = buildPairMarkup(result, filtered.edges);
@@ -730,7 +757,7 @@ function renderAnalysisView() {
           </div>
         </div>
 
-        <article class="workflow-step panel table-panel collapsible" id="levelSection">
+        <article class="workflow-step workflow-step--${workflowStates.levelSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "levelSection" ? "" : "collapsed"}" id="levelSection">
           <div class="workflow-step__rail">
             <span class="workflow-step__number">1</span>
             <span class="workflow-step__line" aria-hidden="true"></span>
@@ -752,7 +779,7 @@ function renderAnalysisView() {
           </div>
         </article>
 
-        <article class="workflow-step panel table-panel collapsible" id="groupsSection">
+        <article class="workflow-step workflow-step--${workflowStates.groupsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "groupsSection" ? "" : "collapsed"}" id="groupsSection">
           <div class="workflow-step__rail">
             <span class="workflow-step__number">2</span>
             <span class="workflow-step__line" aria-hidden="true"></span>
@@ -774,7 +801,7 @@ function renderAnalysisView() {
           </div>
         </article>
 
-        <article class="workflow-step panel table-panel collapsible collapsed" id="documentsSection">
+        <article class="workflow-step workflow-step--${workflowStates.documentsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "documentsSection" ? "" : "collapsed"}" id="documentsSection">
           <div class="workflow-step__rail">
             <span class="workflow-step__number">3</span>
             <span class="workflow-step__line" aria-hidden="true"></span>
@@ -796,7 +823,7 @@ function renderAnalysisView() {
           </div>
         </article>
 
-        <article class="workflow-step panel table-panel collapsible collapsed" id="pairsSection">
+        <article class="workflow-step workflow-step--${workflowStates.pairsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "pairsSection" ? "" : "collapsed"}" id="pairsSection">
           <div class="workflow-step__rail">
             <span class="workflow-step__number">4</span>
             <span class="workflow-step__line" aria-hidden="true"></span>
@@ -818,7 +845,7 @@ function renderAnalysisView() {
           </div>
         </article>
 
-        <article class="workflow-step workflow-step--last panel table-panel collapsible collapsed" id="issuesSection">
+        <article class="workflow-step workflow-step--last workflow-step--${workflowStates.issuesSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "issuesSection" ? "" : "collapsed"}" id="issuesSection">
           <div class="workflow-step__rail">
             <span class="workflow-step__number">5</span>
           </div>
@@ -1368,6 +1395,10 @@ function wireCollapsibles(scope) {
     trigger.addEventListener("click", () => {
       const id = trigger.getAttribute("data-toggle");
       const section = scope.querySelector(`#${id}`);
+      if (WORKFLOW_SEQUENCE.includes(id)) {
+        setCurrentWorkflowStep(id);
+        return;
+      }
       section?.classList.toggle("collapsed");
     });
   });
@@ -1437,12 +1468,27 @@ function wireResultControls(scope) {
 }
 
 function revealWorkflowSection(targetId) {
-  const section = document.querySelector(`#${targetId}`);
-  if (!section) {
+  if (!WORKFLOW_SEQUENCE.includes(targetId)) {
+    const section = document.querySelector(`#${targetId}`);
+    if (!section) {
+      return;
+    }
+    section.classList.remove("collapsed");
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
-  section.classList.remove("collapsed");
-  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  setCurrentWorkflowStep(targetId);
+  requestAnimationFrame(() => {
+    document.querySelector(`#${targetId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function setCurrentWorkflowStep(stepId) {
+  if (!WORKFLOW_SEQUENCE.includes(stepId)) {
+    return;
+  }
+  state.analysisView.currentWorkflowStep = stepId;
+  renderAnalysisView();
 }
 
 function focusDocumentTypeSelect(documentId) {
@@ -1581,6 +1627,7 @@ async function runAnalysis() {
     const result = analyzeDocuments(documents, threshold, state.analysisView.levelOverrides);
     state.analysisView.query = "";
     state.analysisView.filter = "all";
+    state.analysisView.currentWorkflowStep = "levelSection";
     state.analysisView.usedSampleData = state.includeSampleData;
     renderResults(result, issues);
     renderStatus(
