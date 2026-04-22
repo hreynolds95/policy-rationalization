@@ -245,6 +245,32 @@ body {
   background: var(--bg-secondary);
 }
 
+.flow-card {
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--bg-secondary);
+}
+
+.flow-card + .flow-card {
+  margin-top: 10px;
+}
+
+.flow-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+}
+
+.flow-card p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.flow-card--compact p {
+  margin-top: 8px;
+}
+
 .toggle {
   display: flex;
   gap: 10px;
@@ -430,6 +456,31 @@ button:hover,
 .results-shell {
   display: grid;
   gap: 8px;
+}
+
+.empty-state {
+  padding: 12px;
+}
+
+.empty-state h2 {
+  margin: 0 0 10px;
+}
+
+.empty-state p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.empty-state__steps {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  color: var(--accent-2);
+  display: grid;
+  gap: 8px;
+}
+
+.empty-state__steps li {
+  line-height: 1.45;
 }
 
 .table-panel {

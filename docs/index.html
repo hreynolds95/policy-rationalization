@@ -43,17 +43,24 @@
       <main class="layout">
         <section class="panel panel--sticky">
           <div class="panel__section">
-            <p class="eyebrow">1. Seed the analysis</p>
-            <h2>Choose your input mix</h2>
-            <div class="demo-box">
-              <label class="toggle" for="include-sample">
-                <input id="include-sample" type="checkbox">
-                Include the built-in demo library
-              </label>
+            <p class="eyebrow">1. Pick a starting path</p>
+            <h2>Run the demo or load your own sources</h2>
+            <div class="flow-card">
+              <strong>Fastest walkthrough</strong>
+              <p>Load the guided demo setup to show the workflow, sample URLs, and built-in document library in one click.</p>
               <div class="control-row">
-                <button class="ghost-button" type="button" data-load-sample-urls>Load sample URLs</button>
+                <button class="ghost-button" type="button" data-load-sample-urls>Load demo setup</button>
                 <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
               </div>
+            </div>
+            <div class="flow-card flow-card--compact">
+              <label class="toggle" for="include-sample">
+                <input id="include-sample" type="checkbox">
+                Include the built-in demo library during analysis
+              </label>
+              <p class="hint">
+                Keep this on for team walkthroughs. Turn it off when you only want to assess real uploaded or pasted documents.
+              </p>
             </div>
           </div>
 
@@ -73,14 +80,28 @@
 
           <div class="panel__section">
             <p class="eyebrow">3. Run the review</p>
-            <button class="primary-button" type="button" data-analyze>Analyze document set</button>
+            <p class="hint">
+              The workflow checks document level first, then duplicate groups, then detailed pair overlap and import issues.
+            </p>
+            <div class="control-row">
+              <button class="primary-button" type="button" data-analyze>Analyze document set</button>
+              <button class="ghost-button" type="button" data-reset-workspace>Reset inputs</button>
+            </div>
             <div class="status" data-status></div>
           </div>
         </section>
 
         <section class="panel">
           <div class="panel__section">
-            <p class="eyebrow">Public URLs</p>
+            <p class="eyebrow">Input workspace</p>
+            <h2>Load sources in a clean sequence</h2>
+            <p class="section-subtitle">
+              Recommended order: load the demo setup for a walkthrough, or add your own URLs, files, and pasted text before running the analysis.
+            </p>
+          </div>
+
+          <div class="panel__section">
+            <p class="eyebrow">A. Public URLs</p>
             <h3>Paste URLs to public exports or pages</h3>
             <div class="field">
               <label for="urls">One URL per line</label>
@@ -95,7 +116,7 @@
           </div>
 
           <div class="panel__section">
-            <p class="eyebrow">File imports</p>
+            <p class="eyebrow">B. File imports</p>
             <h3>Upload exported source material</h3>
             <div class="field">
               <label for="files">Accepted file types</label>
@@ -107,7 +128,7 @@
           </div>
 
           <div class="panel__section">
-            <p class="eyebrow">Manual paste</p>
+            <p class="eyebrow">C. Manual paste</p>
             <h3>Add documents directly</h3>
             <div class="manual-stack" data-manual-documents></div>
             <div class="control-row">

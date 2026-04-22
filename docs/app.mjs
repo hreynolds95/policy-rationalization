@@ -181,6 +181,29 @@ function loadManualDocuments() {
     .filter((document) => document.text);
 }
 
+function renderEmptyResults() {
+  const output = document.querySelector("[data-results]");
+  output.innerHTML = `
+    <section class="results-shell">
+      <div class="panel table-panel">
+        <div class="empty-state">
+          <p class="eyebrow">Ready to analyze</p>
+          <h2>Start with the demo or assemble your own document set</h2>
+          <p>
+            The cleanest path is to load the demo setup, then run the analysis to show the full workflow.
+            For real work, add public URLs, uploads, or pasted text and run the same process.
+          </p>
+          <ol class="empty-state__steps">
+            <li>Choose the demo path or add your own sources.</li>
+            <li>Adjust the similarity threshold if needed.</li>
+            <li>Run the analysis and start with document level evaluation before consolidation review.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderStatus(message, tone = "neutral") {
   const status = document.querySelector("[data-status]");
   status.textContent = message;
@@ -236,6 +259,39 @@ async function loadDeploymentBadge() {
       : "timestamp unavailable";
     setDeploymentBadge("Last updated:", fallback);
   }
+}
+
+function loadDemoSetup() {
+  const toggle = document.querySelector("#include-sample");
+  const urlsField = document.querySelector("#urls");
+  toggle.checked = true;
+  state.includeSampleData = true;
+  urlsField.value = SAMPLE_URLS.join("\n");
+  renderStatus(
+    "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
+  );
+}
+
+function resetWorkspace() {
+  const toggle = document.querySelector("#include-sample");
+  const urlsField = document.querySelector("#urls");
+  const filesField = document.querySelector("#files");
+  const manualContainer = document.querySelector("[data-manual-documents]");
+
+  toggle.checked = false;
+  state.includeSampleData = false;
+  urlsField.value = "";
+  filesField.value = "";
+  manualContainer.innerHTML = "";
+  ensureMinimumManualCards();
+
+  state.analysisView.query = "";
+  state.analysisView.filter = "all";
+  state.analysisView.result = null;
+  state.analysisView.issues = [];
+
+  renderEmptyResults();
+  renderStatus("Workspace reset. Add demo data or your own documents to begin again.");
 }
 
 function renderResults(result, issues) {
@@ -762,7 +818,7 @@ async function runAnalysis() {
       "Add at least two documents. The quickest path is the built-in demo library or a small file upload set.",
       "warning"
     );
-    document.querySelector("[data-results]").innerHTML = "";
+    renderEmptyResults();
     return;
   }
 
@@ -775,7 +831,6 @@ async function runAnalysis() {
 
 function wireDemoControls() {
   const toggle = document.querySelector("#include-sample");
-  const urlsField = document.querySelector("#urls");
   const loadUrlsButton = document.querySelector("[data-load-sample-urls]");
   const runDemoButton = document.querySelector("[data-run-demo]");
 
@@ -784,13 +839,11 @@ function wireDemoControls() {
   });
 
   loadUrlsButton.addEventListener("click", () => {
-    urlsField.value = SAMPLE_URLS.join("\n");
-    renderStatus("Sample URLs loaded into the textarea. These are illustrative placeholders for team walkthroughs.");
+    loadDemoSetup();
   });
 
   runDemoButton.addEventListener("click", async () => {
-    toggle.checked = true;
-    state.includeSampleData = true;
+    loadDemoSetup();
     await runAnalysis();
   });
 }
@@ -800,6 +853,10 @@ function wireForm() {
     event.preventDefault();
     await runAnalysis();
   });
+
+  document.querySelector("[data-reset-workspace]").addEventListener("click", () => {
+    resetWorkspace();
+  });
 }
 
 function initialize() {
@@ -807,6 +864,7 @@ function initialize() {
   wireDemoControls();
   wireForm();
   void loadDeploymentBadge();
+  renderEmptyResults();
   renderStatus("Ready. Load the demo library, upload files, paste URLs, or add manual documents.");
 }
 
