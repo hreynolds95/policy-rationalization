@@ -268,6 +268,16 @@ export function buildWorkflowStepStates(currentStepId = "levelSection") {
   );
 }
 
+function formatWorkflowStateLabel(stepState) {
+  if (stepState === "complete") {
+    return "Completed";
+  }
+  if (stepState === "current") {
+    return "Current";
+  }
+  return "Up next";
+}
+
 function renderDemoBanner() {
   const target = document.querySelector("[data-demo-banner]");
   if (!target) {
@@ -759,13 +769,16 @@ function renderAnalysisView() {
 
         <article class="workflow-step workflow-step--${workflowStates.levelSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "levelSection" ? "" : "collapsed"}" id="levelSection">
           <div class="workflow-step__rail">
-            <span class="workflow-step__number">1</span>
+            <span class="workflow-step__number"><span class="workflow-step__number-text">1</span></span>
             <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
           <div class="workflow-step__content">
             <div class="collapsible-header" data-toggle="levelSection">
               <div class="collapsible-title-group">
-                <p class="workflow-step__eyebrow">Step 1</p>
+                <div class="workflow-step__heading-row">
+                  <p class="workflow-step__eyebrow">Step 1</p>
+                  <span class="workflow-step__status workflow-step__status--${workflowStates.levelSection}">${formatWorkflowStateLabel(workflowStates.levelSection)}</span>
+                </div>
                 <h3>Document level evaluation</h3>
                 <p class="section-subtitle">Check whether each document is operating at the right level of requirements before consolidation.</p>
               </div>
@@ -781,13 +794,16 @@ function renderAnalysisView() {
 
         <article class="workflow-step workflow-step--${workflowStates.groupsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "groupsSection" ? "" : "collapsed"}" id="groupsSection">
           <div class="workflow-step__rail">
-            <span class="workflow-step__number">2</span>
+            <span class="workflow-step__number"><span class="workflow-step__number-text">2</span></span>
             <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
           <div class="workflow-step__content">
             <div class="collapsible-header" data-toggle="groupsSection">
               <div class="collapsible-title-group">
-                <p class="workflow-step__eyebrow">Step 2</p>
+                <div class="workflow-step__heading-row">
+                  <p class="workflow-step__eyebrow">Step 2</p>
+                  <span class="workflow-step__status workflow-step__status--${workflowStates.groupsSection}">${formatWorkflowStateLabel(workflowStates.groupsSection)}</span>
+                </div>
                 <h3>Consolidation groups</h3>
                 <p class="section-subtitle">Review canonical candidates, review checks, and source membership for each duplicate cluster.</p>
               </div>
@@ -803,13 +819,16 @@ function renderAnalysisView() {
 
         <article class="workflow-step workflow-step--${workflowStates.documentsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "documentsSection" ? "" : "collapsed"}" id="documentsSection">
           <div class="workflow-step__rail">
-            <span class="workflow-step__number">3</span>
+            <span class="workflow-step__number"><span class="workflow-step__number-text">3</span></span>
             <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
           <div class="workflow-step__content">
             <div class="collapsible-header" data-toggle="documentsSection">
               <div class="collapsible-title-group">
-                <p class="workflow-step__eyebrow">Step 3</p>
+                <div class="workflow-step__heading-row">
+                  <p class="workflow-step__eyebrow">Step 3</p>
+                  <span class="workflow-step__status workflow-step__status--${workflowStates.documentsSection}">${formatWorkflowStateLabel(workflowStates.documentsSection)}</span>
+                </div>
                 <h3>Document review surface</h3>
                 <p class="section-subtitle">Browse the analyzed source set with cluster membership and inherited review posture.</p>
               </div>
@@ -825,13 +844,16 @@ function renderAnalysisView() {
 
         <article class="workflow-step workflow-step--${workflowStates.pairsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "pairsSection" ? "" : "collapsed"}" id="pairsSection">
           <div class="workflow-step__rail">
-            <span class="workflow-step__number">4</span>
+            <span class="workflow-step__number"><span class="workflow-step__number-text">4</span></span>
             <span class="workflow-step__line" aria-hidden="true"></span>
           </div>
           <div class="workflow-step__content">
             <div class="collapsible-header" data-toggle="pairsSection">
               <div class="collapsible-title-group">
-                <p class="workflow-step__eyebrow">Step 4</p>
+                <div class="workflow-step__heading-row">
+                  <p class="workflow-step__eyebrow">Step 4</p>
+                  <span class="workflow-step__status workflow-step__status--${workflowStates.pairsSection}">${formatWorkflowStateLabel(workflowStates.pairsSection)}</span>
+                </div>
                 <h3>Pair overlap triage</h3>
                 <p class="section-subtitle">Use the strongest similarity pairs to spot near-duplicates that may not form a full cluster yet.</p>
               </div>
@@ -847,12 +869,15 @@ function renderAnalysisView() {
 
         <article class="workflow-step workflow-step--last workflow-step--${workflowStates.issuesSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "issuesSection" ? "" : "collapsed"}" id="issuesSection">
           <div class="workflow-step__rail">
-            <span class="workflow-step__number">5</span>
+            <span class="workflow-step__number"><span class="workflow-step__number-text">5</span></span>
           </div>
           <div class="workflow-step__content">
             <div class="collapsible-header" data-toggle="issuesSection">
               <div class="collapsible-title-group">
-                <p class="workflow-step__eyebrow">Step 5</p>
+                <div class="workflow-step__heading-row">
+                  <p class="workflow-step__eyebrow">Step 5</p>
+                  <span class="workflow-step__status workflow-step__status--${workflowStates.issuesSection}">${formatWorkflowStateLabel(workflowStates.issuesSection)}</span>
+                </div>
                 <h3>Import issues and blockers</h3>
                 <p class="section-subtitle">Review CORS, authentication, parsing, and empty-content warnings that could affect confidence in the analysis.</p>
               </div>

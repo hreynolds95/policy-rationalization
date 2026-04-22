@@ -1141,12 +1141,35 @@ button:hover,
   font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0.02em;
+  position: relative;
+}
+
+.workflow-step__number-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .workflow-step--complete .workflow-step__number {
   background: rgba(163, 215, 149, 0.16);
   border-color: rgba(163, 215, 149, 0.3);
   color: var(--success);
+}
+
+.workflow-step--complete .workflow-step__number-text {
+  opacity: 0;
+}
+
+.workflow-step--complete .workflow-step__number::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 14px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  top: 7px;
+  left: 12px;
 }
 
 .workflow-step--current .workflow-step__number {
@@ -1192,6 +1215,49 @@ button:hover,
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.workflow-step__heading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workflow-step__heading-row .workflow-step__eyebrow {
+  margin-bottom: 0;
+}
+
+.workflow-step__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--accent-2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.workflow-step__status--complete {
+  color: var(--success);
+  border-color: rgba(163, 215, 149, 0.28);
+  background: rgba(163, 215, 149, 0.12);
+}
+
+.workflow-step__status--current {
+  color: var(--info);
+  border-color: rgba(124, 172, 255, 0.28);
+  background: rgba(124, 172, 255, 0.12);
+}
+
+.workflow-step__status--upcoming {
+  color: var(--muted);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .workflow-step--upcoming .workflow-step__eyebrow,
