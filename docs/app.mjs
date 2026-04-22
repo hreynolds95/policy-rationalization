@@ -225,18 +225,16 @@ async function loadDeploymentBadge() {
     }
 
     const payload = await response.json();
-    const commit = (payload.commit || "").slice(0, 7) || "unknown";
     const updatedAt = payload.updated_at || payload.created_at;
-    const status = payload.status || "unknown";
     setDeploymentBadge(
-      `Latest successful Pages deploy: ${commit}`,
-      `${formatDeploymentTimestamp(updatedAt)} • status: ${status}`
+      "Last updated:",
+      formatDeploymentTimestamp(updatedAt)
     );
   } catch {
     const fallback = document.lastModified
       ? formatDeploymentTimestamp(document.lastModified)
       : "timestamp unavailable";
-    setDeploymentBadge("Latest deploy metadata unavailable", `Page file timestamp: ${fallback}`);
+    setDeploymentBadge("Last updated:", fallback);
   }
 }
 
