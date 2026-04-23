@@ -10,7 +10,7 @@ import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const DEPLOYMENT_API_URL =
   "https://api.github.com/repos/hreynolds95/policy-rationalization/pages/builds/latest";
-const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v1";
+const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
