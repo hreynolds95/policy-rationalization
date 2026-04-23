@@ -564,24 +564,124 @@ function buildUploadedFilesMarkup() {
   `;
 }
 
+function buildStartPathMarkup() {
+  const readiness = computeWorkspaceReadiness();
+  const hasLiveInputs = readiness.urlCount || readiness.fileCount || readiness.manualCount;
+
+  return `
+    <div class="wizard-grid wizard-grid--source-start">
+      <section class="panel table-panel start-path-card ${state.includeSampleData ? "start-path-card--active" : ""}">
+        <div class="start-path-card__header">
+          <div>
+            <p class="eyebrow">Path A</p>
+            <h3>Walk through the demo</h3>
+          </div>
+          <span class="doc-badge ${state.includeSampleData ? "doc-badge--ok" : ""}">
+            ${state.includeSampleData ? "Demo ready" : "Fastest setup"}
+          </span>
+        </div>
+        <p class="section-subtitle">Use the bundled sample library and example URLs to show the full guided review flow to stakeholders quickly.</p>
+        <div class="flow-card flow-card--compact">
+          <strong>Best for first-time reviewers</strong>
+          <p>Run a clean walkthrough without collecting source material first.</p>
+        </div>
+        <div class="control-row">
+          <button class="ghost-button" type="button" data-load-demo>Load demo setup</button>
+          <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
+        </div>
+        <label class="toggle start-path-card__toggle">
+          <input type="checkbox" data-include-sample ${state.includeSampleData ? "checked" : ""}>
+          Keep the built-in demo library included
+        </label>
+      </section>
+
+      <section class="panel table-panel start-path-card ${hasLiveInputs ? "start-path-card--active" : ""}">
+        <div class="start-path-card__header">
+          <div>
+            <p class="eyebrow">Path B</p>
+            <h3>Review real documents</h3>
+          </div>
+          <span class="doc-badge ${hasLiveInputs ? "doc-badge--ok" : ""}">
+            ${hasLiveInputs ? "Inputs started" : "Bring your own sources"}
+          </span>
+        </div>
+        <p class="section-subtitle">Assemble a real review set from public URLs, exported files, or pasted document text. All source types combine into one analysis run.</p>
+        <div class="source-summary start-path-card__summary">${buildSourceSummaryMarkup()}</div>
+        <div class="control-row control-row--wrap">
+          <button class="ghost-button" type="button" data-source-tab-jump="urls">Add URLs</button>
+          <button class="ghost-button" type="button" data-source-tab-jump="files">Stage files</button>
+          <button class="ghost-button" type="button" data-source-tab-jump="manual">Paste text</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function buildRunChecklistMarkup() {
+  const readiness = computeWorkspaceReadiness();
+  const checklist = [
+    {
+      label: "Choose a starting path",
+      detail: state.includeSampleData || readiness.urlCount || readiness.fileCount || readiness.manualCount
+        ? "A demo or live review source path is in progress."
+        : "Pick the demo walkthrough or start loading real sources.",
+      state: state.includeSampleData || readiness.urlCount || readiness.fileCount || readiness.manualCount ? "complete" : "current",
+    },
+    {
+      label: "Load enough source material",
+      detail: readiness.estimatedDocuments >= 2
+        ? `${readiness.estimatedDocuments} estimated documents are ready for comparison.`
+        : "Add at least two documents so overlap scoring can run.",
+      state: readiness.estimatedDocuments >= 2 ? "complete" : "current",
+    },
+    {
+      label: "Run analysis and unlock Step 2",
+      detail: getHasAnalysis()
+        ? "The review pages are unlocked."
+        : "Run the document set to move into document-level review.",
+      state: getHasAnalysis() ? "complete" : readiness.estimatedDocuments >= 2 ? "current" : "upcoming",
+    },
+  ];
+
+  return `
+    <div class="run-checklist">
+      ${checklist
+        .map(
+          (item, index) => `
+            <div class="run-checklist__item run-checklist__item--${item.state}">
+              <span class="run-checklist__number">${index + 1}</span>
+              <div>
+                <strong>${item.label}</strong>
+                <span>${item.detail}</span>
+              </div>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function buildSourcesStepMarkup() {
   const route = getWizardRoute("sources");
   const hasAnalysis = getHasAnalysis();
+  const readiness = computeWorkspaceReadiness();
   return `
     <section class="wizard-step-page">
       <div class="wizard-step-page__header">
         <p class="eyebrow">${route.step}</p>
         <h2>${route.title}</h2>
-        <p class="section-subtitle">${route.subtitle}</p>
+        <p class="section-subtitle">Choose a starting path, assemble the source set, then run the analysis to unlock the review pages.</p>
       </div>
 
       ${buildDemoBannerMarkup("workspace")}
+      <div data-start-path-live>${buildStartPathMarkup()}</div>
 
       <div class="wizard-grid wizard-grid--sources">
         <section class="panel table-panel">
           <div class="step-card-header">
-            <h3>Source workspace</h3>
-            <p class="section-subtitle">Pick the demo path or assemble your own inputs before running the analysis.</p>
+            <h3>Source intake workspace</h3>
+            <p class="section-subtitle">Use one or more source types below. Everything loaded here rolls into the same review session.</p>
           </div>
           <div class="workspace-switcher">
             <div class="toggle-group toggle-group--full">
@@ -595,7 +695,7 @@ function buildSourcesStepMarkup() {
 
           <div class="source-panel ${state.activeSourceTab === "demo" ? "is-active" : ""}">
             <p class="eyebrow">Demo path</p>
-            <h3>Walk through the full workflow with one click</h3>
+            <h3>Walk through the workflow with sample content</h3>
             <p class="section-subtitle">Use illustrative sample documents and example URLs to show the wizard flow to your team quickly.</p>
             <div class="flow-card">
               <strong>Recommended for first-time reviewers</strong>
@@ -606,8 +706,8 @@ function buildSourcesStepMarkup() {
               </div>
             </div>
             <div class="flow-card flow-card--compact">
-              <label class="toggle" for="include-sample">
-                <input id="include-sample" type="checkbox" ${state.includeSampleData ? "checked" : ""}>
+              <label class="toggle">
+                <input type="checkbox" data-include-sample ${state.includeSampleData ? "checked" : ""}>
                 Include the built-in demo library during analysis
               </label>
               <p class="hint">Keep this on for walkthroughs. Turn it off when you only want to assess real uploaded or pasted documents.</p>
@@ -650,9 +750,12 @@ function buildSourcesStepMarkup() {
 
         <section class="panel table-panel">
           <div class="step-card-header">
-            <h3>Run settings</h3>
-            <p class="section-subtitle">Adjust the similarity threshold and confirm the document set before you move into the review pages.</p>
+            <h3>Run and continue</h3>
+            <p class="section-subtitle">Check readiness, tune the threshold, then start the analysis when the source set is ready.</p>
           </div>
+
+          <div data-run-checklist-live>${buildRunChecklistMarkup()}</div>
+
           <div class="field">
             <label for="thresholdSlider">Similarity threshold</label>
             <div class="threshold-row">
@@ -665,7 +768,7 @@ function buildSourcesStepMarkup() {
           <div data-readiness-live>${buildReadinessCardMarkup()}</div>
 
           <div class="control-row control-row--spaced">
-            <button class="primary-button" type="button" data-analyze>Analyze document set</button>
+            <button class="primary-button" type="button" data-analyze>${readiness.estimatedDocuments >= 2 ? "Analyze and continue" : "Analyze document set"}</button>
             <button class="ghost-button" type="button" data-reset-workspace>Reset inputs</button>
           </div>
 
@@ -990,9 +1093,18 @@ function renderApp() {
 }
 
 function refreshSourcesStepFragments() {
+  const startPathTarget = document.querySelector("[data-start-path-live]");
+  if (startPathTarget) {
+    startPathTarget.innerHTML = buildStartPathMarkup();
+    wireStepEvents(startPathTarget);
+  }
   const summaryTarget = document.querySelector("[data-source-summary-live]");
   if (summaryTarget) {
     summaryTarget.innerHTML = buildSourceSummaryMarkup();
+  }
+  const checklistTarget = document.querySelector("[data-run-checklist-live]");
+  if (checklistTarget) {
+    checklistTarget.innerHTML = buildRunChecklistMarkup();
   }
   const readinessTarget = document.querySelector("[data-readiness-live]");
   if (readinessTarget) {
@@ -1863,14 +1975,21 @@ function wireStepEvents(scope) {
     });
   });
 
-  const sampleToggle = scope.querySelector("#include-sample");
-  if (sampleToggle) {
+  scope.querySelectorAll("[data-source-tab-jump]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeSourceTab = button.getAttribute("data-source-tab-jump");
+      persistState();
+      renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-include-sample]").forEach((sampleToggle) => {
     sampleToggle.addEventListener("change", () => {
       state.includeSampleData = sampleToggle.checked;
       persistState();
       renderApp();
     });
-  }
+  });
 
   const urlsInput = scope.querySelector("[data-urls-input]");
   if (urlsInput) {
