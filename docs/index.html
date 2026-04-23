@@ -23,8 +23,8 @@
               <p class="eyebrow">Compliance Governance Analytics</p>
               <h1>Policy Rationalization</h1>
               <p class="subhead">
-                Compare related policies and standards, cluster likely duplicates, and surface review flags
-                before consolidation work begins.
+                Compare related policies and standards, cluster likely duplicates, and walk reviewers through
+                document-level evaluation before consolidation work begins.
               </p>
               <div class="hero-meta">
                 <span class="hero-chip">Preserve required structure</span>
@@ -40,148 +40,23 @@
         </div>
       </header>
 
-      <main class="layout">
-        <section class="panel panel--sticky">
-          <div class="panel__section">
-            <p class="eyebrow">1. Pick a starting path</p>
-            <h2>Run the demo or load your own sources</h2>
-            <div class="flow-card">
-              <strong>Fastest walkthrough</strong>
-              <p>Load the guided demo setup to show the workflow, sample URLs, and built-in document library in one click.</p>
-              <div class="control-row">
-                <button class="ghost-button" type="button" data-load-sample-urls>Load demo setup</button>
-                <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
-              </div>
-            </div>
-            <div class="flow-card flow-card--compact">
-              <label class="toggle" for="include-sample">
-                <input id="include-sample" type="checkbox">
-                Include the built-in demo library during analysis
-              </label>
-              <p class="hint">
-                Keep this on for team walkthroughs. Turn it off when you only want to assess real uploaded or pasted documents.
-              </p>
-            </div>
+      <main class="wizard-layout">
+        <section class="panel wizard-shell">
+          <div class="panel__section wizard-progress-shell">
+            <div data-step-progress></div>
           </div>
 
-          <div class="panel__section">
-            <p class="eyebrow">2. Tune the sensitivity</p>
-            <h3>Similarity threshold</h3>
-            <div class="field">
-              <div class="threshold-row">
-                <input id="threshold-slider" type="range" min="0.2" max="0.9" step="0.01" value="0.45">
-                <input id="threshold" type="number" min="0.2" max="0.9" step="0.01" value="0.45">
-              </div>
-              <p class="hint">
-                Lower values broaden clustering. Higher values keep only stronger near-duplicates.
-              </p>
-            </div>
-          </div>
-
-          <div class="panel__section">
-            <p class="eyebrow">3. Confirm readiness</p>
-            <div class="readiness-card" data-readiness-card></div>
-          </div>
-
-          <div class="panel__section">
-            <p class="eyebrow">4. Run the review</p>
-            <div class="control-row">
-              <button class="primary-button" type="button" data-analyze>Analyze document set</button>
-              <button class="ghost-button" type="button" data-reset-workspace>Reset inputs</button>
-            </div>
+          <div class="panel__section wizard-status-shell">
             <div class="status" data-status></div>
           </div>
-        </section>
 
-        <section class="panel">
-          <div class="panel__section">
-            <p class="eyebrow">Input workspace</p>
-            <h2>Load sources in a clean sequence</h2>
-            <p class="section-subtitle">
-              Recommended order: load the demo setup for a walkthrough, or add your own URLs, files, and pasted text before running the analysis.
-            </p>
-            <div class="workspace-switcher">
-              <div class="toggle-group toggle-group--full" data-source-tabs>
-                <button class="toggle-btn active" type="button" data-source-tab="demo">Demo</button>
-                <button class="toggle-btn" type="button" data-source-tab="urls">URLs</button>
-                <button class="toggle-btn" type="button" data-source-tab="files">Files</button>
-                <button class="toggle-btn" type="button" data-source-tab="manual">Manual</button>
-              </div>
-              <div class="source-summary" data-source-summary></div>
-              <div data-demo-banner></div>
-            </div>
-          </div>
-
-          <div class="panel__section source-panel is-active" data-source-panel="demo">
-            <p class="eyebrow">Demo path</p>
-            <h3>Walk through the full workflow with one click</h3>
-            <p class="section-subtitle">
-              This path enables the sample library and loads illustrative sample URLs so your team can see the end-to-end review flow quickly.
-            </p>
-            <div class="flow-card">
-              <strong>Recommended for first-time reviewers</strong>
-              <p>Use this when you want fast feedback on the workflow before bringing in real policy content.</p>
-              <div class="control-row">
-                <button class="ghost-button" type="button" data-load-sample-urls>Load demo setup</button>
-                <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel__section source-panel" data-source-panel="urls">
-            <p class="eyebrow">URL imports</p>
-            <h3>Paste URLs to public exports or pages</h3>
-            <div class="field">
-              <label for="urls">One URL per line</label>
-              <textarea
-                id="urls"
-                placeholder="https://example.com/policy-a&#10;https://docs.google.com/document/d/.../edit"
-              ></textarea>
-              <p class="hint">
-                Browser fetches are limited by public access and CORS. If a source is private or blocked, upload an export instead.
-              </p>
-            </div>
-          </div>
-
-          <div class="panel__section source-panel" data-source-panel="files">
-            <p class="eyebrow">File imports</p>
-            <h3>Upload exported source material</h3>
-            <div class="field">
-              <label for="files">Accepted file types</label>
-              <input id="files" type="file" accept=".txt,.md,.markdown,.csv" multiple>
-              <p class="hint">
-                CSV imports should include a content-like column such as `content`, `text`, `policy_text`, or `description`.
-              </p>
-            </div>
-          </div>
-
-          <div class="panel__section source-panel" data-source-panel="manual">
-            <p class="eyebrow">Manual paste</p>
-            <h3>Add documents directly</h3>
-            <div class="manual-stack" data-manual-documents></div>
-            <div class="control-row">
-              <button class="ghost-button" type="button" data-add-manual>Add another document</button>
-            </div>
-          </div>
-
-          <div class="panel__section">
-            <p class="eyebrow">Results</p>
-            <div data-results></div>
+          <div class="panel__section wizard-content-shell">
+            <div data-step-content></div>
           </div>
         </section>
       </main>
     </div>
 
     <script type="module" src="./app.mjs"></script>
-    <script>
-      const slider = document.getElementById("threshold-slider");
-      const input = document.getElementById("threshold");
-      slider.addEventListener("input", () => {
-        input.value = slider.value;
-      });
-      input.addEventListener("input", () => {
-        slider.value = input.value;
-      });
-    </script>
   </body>
 </html>

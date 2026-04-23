@@ -8,25 +8,9 @@ import {
 } from "./analysis.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
-const state = {
-  includeSampleData: false,
-  activeSourceTab: "demo",
-  analysisView: {
-    query: "",
-    filter: "all",
-    documents: [],
-    threshold: 0.45,
-    levelOverrides: {},
-    currentWorkflowStep: "levelSection",
-    usedSampleData: false,
-    result: null,
-    issues: [],
-  },
-};
-
 const DEPLOYMENT_API_URL =
   "https://api.github.com/repos/hreynolds95/policy-rationalization/pages/builds/latest";
-
+const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v1";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
@@ -34,154 +18,83 @@ const WORKFLOW_SEQUENCE = [
   "pairsSection",
   "issuesSection",
 ];
+const DEFAULT_MANUAL_ENTRIES = [
+  { title: "", text: "" },
+  { title: "", text: "" },
+];
+const WIZARD_ROUTES = [
+  {
+    id: "sources",
+    hash: "#/sources",
+    step: "Step 1",
+    title: "Load sources",
+    subtitle: "Assemble the document set, tune the threshold, and run the analysis.",
+  },
+  {
+    id: "level-review",
+    hash: "#/level-review",
+    step: "Step 2",
+    title: "Review document level",
+    subtitle: "Confirm each document is operating at the correct requirement level before consolidation.",
+  },
+  {
+    id: "groups",
+    hash: "#/groups",
+    step: "Step 3",
+    title: "Review consolidation groups",
+    subtitle: "Evaluate canonical candidates, watch-outs, and duplicate cluster recommendations.",
+  },
+  {
+    id: "details",
+    hash: "#/details",
+    step: "Step 4",
+    title: "Review document and pair details",
+    subtitle: "Inspect the supporting evidence, browse the analyzed corpus, and spot overlap outliers.",
+  },
+  {
+    id: "export",
+    hash: "#/export",
+    step: "Step 5",
+    title: "Export and wrap up",
+    subtitle: "Capture the current review view, note import blockers, and share the output with stakeholders.",
+  },
+];
 
-function createManualDocumentCard(title = "", text = "") {
-  const wrapper = document.createElement("article");
-  wrapper.className = "manual-card";
-  wrapper.innerHTML = `
-    <div class="manual-card__header">
-      <input class="manual-card__title" type="text" placeholder="Document title" value="${escapeHtml(title)}">
-      <button class="ghost-button ghost-button--small" type="button" data-remove-manual>Remove</button>
-    </div>
-    <textarea class="manual-card__text" rows="7" placeholder="Paste policy or standard text here">${escapeHtml(
-      text
-    )}</textarea>
-  `;
-  return wrapper;
+const state = {
+  route: "sources",
+  includeSampleData: false,
+  activeSourceTab: "demo",
+  isBusy: false,
+  workspace: {
+    urlsText: "",
+    uploadedFiles: [],
+    manualEntries: cloneManualEntries(DEFAULT_MANUAL_ENTRIES),
+  },
+  analysisView: {
+    query: "",
+    filter: "all",
+    documents: [],
+    threshold: 0.45,
+    levelOverrides: {},
+    usedSampleData: false,
+    result: null,
+    issues: [],
+  },
+};
+
+function cloneManualEntries(entries) {
+  return (entries || []).map((entry) => ({
+    title: entry?.title || "",
+    text: entry?.text || "",
+  }));
 }
 
 function escapeHtml(value) {
-  return value
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
-}
-
-function ensureMinimumManualCards() {
-  const container = document.querySelector("[data-manual-documents]");
-  if (!container.children.length) {
-    container.appendChild(createManualDocumentCard());
-    container.appendChild(createManualDocumentCard());
-  }
-}
-
-function setupManualDocuments() {
-  const container = document.querySelector("[data-manual-documents]");
-  const addButton = document.querySelector("[data-add-manual]");
-
-  addButton.addEventListener("click", () => {
-    container.appendChild(createManualDocumentCard());
-  });
-
-  container.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-remove-manual]");
-    if (!button) {
-      return;
-    }
-    button.closest(".manual-card")?.remove();
-    ensureMinimumManualCards();
-  });
-
-  ensureMinimumManualCards();
-}
-
-async function loadDocumentsFromFiles(fileList, onProgress = () => {}) {
-  const files = [...fileList];
-  const documents = [];
-  const issues = [];
-
-  for (const [index, file] of files.entries()) {
-    onProgress({
-      current: index + 1,
-      total: files.length,
-      label: file.name,
-    });
-    const text = await file.text();
-    if (file.name.toLowerCase().endsWith(".csv")) {
-      const csvDocuments = parseCsv(text, file.name);
-      if (!csvDocuments.length) {
-        issues.push(`${file.name}: could not infer a content column in the CSV`);
-        continue;
-      }
-      documents.push(...csvDocuments);
-      continue;
-    }
-
-    const trimmed = text.trim();
-    if (!trimmed) {
-      issues.push(`${file.name}: file was empty`);
-      continue;
-    }
-    documents.push({
-      id: `${file.name}-file`,
-      title: file.name.replace(/\.[^.]+$/, ""),
-      source: `file://${file.name}`,
-      text: trimmed,
-    });
-  }
-
-  return { documents, issues };
-}
-
-async function loadDocumentsFromUrls(rawUrls, onProgress = () => {}) {
-  const urls = rawUrls
-    .split("\n")
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  const documents = [];
-  const issues = [];
-
-  for (const [index, originalUrl] of urls.entries()) {
-    onProgress({
-      current: index + 1,
-      total: urls.length,
-      label: originalUrl,
-    });
-    const url = normalizeGoogleExportUrl(originalUrl);
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        issues.push(`${originalUrl}: request failed with status ${response.status}`);
-        continue;
-      }
-
-      const text = await response.text();
-      if (isGoogleAuthPage(text)) {
-        issues.push(`${originalUrl}: Google auth is required, so use a public export or upload a file instead`);
-        continue;
-      }
-
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/csv") || url.toLowerCase().includes("format=csv") || url.endsWith(".csv")) {
-        const csvDocuments = parseCsv(text, originalUrl);
-        if (!csvDocuments.length) {
-          issues.push(`${originalUrl}: CSV loaded but no supported content column was found`);
-          continue;
-        }
-        documents.push(...csvDocuments);
-        continue;
-      }
-
-      const extractedText = contentType.includes("text/html") ? extractTextFromHtml(text) : text.trim();
-      if (!extractedText) {
-        issues.push(`${originalUrl}: no readable text was extracted`);
-        continue;
-      }
-
-      documents.push({
-        id: `${originalUrl}-url`,
-        title: deriveTitleFromUrl(originalUrl),
-        source: originalUrl,
-        text: extractedText,
-      });
-    } catch (error) {
-      issues.push(`${originalUrl}: ${error.message}. Public URLs may still fail in-browser because of CORS`);
-    }
-  }
-
-  return { documents, issues };
 }
 
 function pluralize(count, singular, plural = `${singular}s`) {
@@ -198,37 +111,117 @@ function deriveTitleFromUrl(url) {
   }
 }
 
-function loadManualDocuments() {
-  const cards = [...document.querySelectorAll(".manual-card")];
-  return cards
-    .map((card, index) => ({
-      id: `manual-${index + 1}`,
-      title: card.querySelector(".manual-card__title").value.trim() || `Manual Document ${index + 1}`,
-      source: `manual://document-${index + 1}`,
-      text: card.querySelector(".manual-card__text").value.trim(),
-    }))
-    .filter((document) => document.text);
+function normalizeManualEntries(entries) {
+  const normalized = cloneManualEntries(entries);
+  while (normalized.length < 2) {
+    normalized.push({ title: "", text: "" });
+  }
+  return normalized;
 }
 
-function countUrlEntries() {
-  return document
-    .querySelector("#urls")
-    .value.split("\n")
+function countUrlEntries(text = state.workspace.urlsText) {
+  return text
+    .split("\n")
     .map((value) => value.trim())
     .filter(Boolean).length;
 }
 
-function countManualEntries() {
-  return loadManualDocuments().length;
+function countManualEntries(entries = state.workspace.manualEntries) {
+  return entries.filter((entry) => entry.text.trim()).length;
 }
 
-function updateSourceSummary() {
-  const target = document.querySelector("[data-source-summary]");
-  if (!target) {
+function getWizardRoute(routeId) {
+  return WIZARD_ROUTES.find((route) => route.id === routeId) || WIZARD_ROUTES[0];
+}
+
+function getRouteHash(routeId) {
+  return getWizardRoute(routeId).hash;
+}
+
+function getRouteIdFromHash(hash) {
+  return WIZARD_ROUTES.find((route) => route.hash === hash)?.id || "sources";
+}
+
+function getHasAnalysis() {
+  return Boolean(state.analysisView.result);
+}
+
+function ensureAccessibleRoute(routeId) {
+  if (routeId === "sources") {
+    return routeId;
+  }
+  return getHasAnalysis() ? routeId : "sources";
+}
+
+function persistState() {
+  if (typeof sessionStorage === "undefined") {
     return;
   }
+  const payload = {
+    route: state.route,
+    includeSampleData: state.includeSampleData,
+    activeSourceTab: state.activeSourceTab,
+    workspace: {
+      urlsText: state.workspace.urlsText,
+      uploadedFiles: state.workspace.uploadedFiles,
+      manualEntries: state.workspace.manualEntries,
+    },
+    analysisView: {
+      query: state.analysisView.query,
+      filter: state.analysisView.filter,
+      documents: state.analysisView.documents,
+      threshold: state.analysisView.threshold,
+      levelOverrides: state.analysisView.levelOverrides,
+      usedSampleData: state.analysisView.usedSampleData,
+      result: state.analysisView.result,
+      issues: state.analysisView.issues,
+    },
+  };
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures.
+  }
+}
 
-  const fileCount = document.querySelector("#files").files.length;
+function restoreState() {
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    state.route = ensureAccessibleRoute(parsed.route || "sources");
+    state.includeSampleData = Boolean(parsed.includeSampleData);
+    state.activeSourceTab = parsed.activeSourceTab || "demo";
+    state.workspace.urlsText = parsed.workspace?.urlsText || "";
+    state.workspace.uploadedFiles = Array.isArray(parsed.workspace?.uploadedFiles)
+      ? parsed.workspace.uploadedFiles.map((file) => ({
+          name: file?.name || "uploaded.txt",
+          text: file?.text || "",
+        }))
+      : [];
+    state.workspace.manualEntries = normalizeManualEntries(parsed.workspace?.manualEntries || DEFAULT_MANUAL_ENTRIES);
+    state.analysisView.query = parsed.analysisView?.query || "";
+    state.analysisView.filter = parsed.analysisView?.filter || "all";
+    state.analysisView.documents = Array.isArray(parsed.analysisView?.documents)
+      ? parsed.analysisView.documents
+      : [];
+    state.analysisView.threshold = Number(parsed.analysisView?.threshold || 0.45);
+    state.analysisView.levelOverrides = parsed.analysisView?.levelOverrides || {};
+    state.analysisView.usedSampleData = Boolean(parsed.analysisView?.usedSampleData);
+    state.analysisView.result = parsed.analysisView?.result || null;
+    state.analysisView.issues = Array.isArray(parsed.analysisView?.issues) ? parsed.analysisView.issues : [];
+  } catch {
+    // Ignore corrupted session state and fall back to defaults.
+  }
+}
+
+function buildSourceSummaryMarkup() {
+  const fileCount = state.workspace.uploadedFiles.length;
   const urlCount = countUrlEntries();
   const manualCount = countManualEntries();
   const sampleEnabled = state.includeSampleData;
@@ -236,11 +229,11 @@ function updateSourceSummary() {
   const chips = [
     `<span class="source-chip ${sampleEnabled ? "source-chip--active" : ""}">Demo library ${sampleEnabled ? "on" : "off"}</span>`,
     `<span class="source-chip ${urlCount ? "source-chip--active" : ""}">${urlCount} URL${urlCount === 1 ? "" : "s"}</span>`,
-    `<span class="source-chip ${fileCount ? "source-chip--active" : ""}">${fileCount} file${fileCount === 1 ? "" : "s"}</span>`,
+    `<span class="source-chip ${fileCount ? "source-chip--active" : ""}">${fileCount} staged file${fileCount === 1 ? "" : "s"}</span>`,
     `<span class="source-chip ${manualCount ? "source-chip--active" : ""}">${manualCount} pasted doc${manualCount === 1 ? "" : "s"}</span>`,
   ];
 
-  target.innerHTML = chips.join("");
+  return chips.join("");
 }
 
 export function buildDemoBannerContent(sampleCount, context = "workspace") {
@@ -256,6 +249,23 @@ export function buildDemoBannerContent(sampleCount, context = "workspace") {
   };
 }
 
+function buildDemoBannerMarkup(context = "workspace") {
+  if (!state.includeSampleData && context === "workspace") {
+    return "";
+  }
+  if (!state.analysisView.usedSampleData && context === "results") {
+    return "";
+  }
+  const banner = buildDemoBannerContent(SAMPLE_DOCUMENTS.length, context);
+  return `
+    <div class="demo-banner ${context === "results" ? "demo-banner--results" : ""}">
+      <p class="demo-banner__eyebrow">${banner.title}</p>
+      <strong>${banner.body}</strong>
+      <span>${banner.detail}</span>
+    </div>
+  `;
+}
+
 export function buildWorkflowStepStates(currentStepId = "levelSection") {
   const fallbackStep = WORKFLOW_SEQUENCE.includes(currentStepId) ? currentStepId : WORKFLOW_SEQUENCE[0];
   const activeIndex = WORKFLOW_SEQUENCE.indexOf(fallbackStep);
@@ -266,133 +276,6 @@ export function buildWorkflowStepStates(currentStepId = "levelSection") {
       index < activeIndex ? "complete" : index === activeIndex ? "current" : "upcoming",
     ])
   );
-}
-
-function formatWorkflowStateLabel(stepState) {
-  if (stepState === "complete") {
-    return "Completed";
-  }
-  if (stepState === "current") {
-    return "Current";
-  }
-  return "Up next";
-}
-
-function renderDemoBanner() {
-  const target = document.querySelector("[data-demo-banner]");
-  if (!target) {
-    return;
-  }
-
-  if (!state.includeSampleData) {
-    target.innerHTML = "";
-    return;
-  }
-
-  const banner = buildDemoBannerContent(SAMPLE_DOCUMENTS.length, "workspace");
-  target.innerHTML = `
-    <div class="demo-banner">
-      <p class="demo-banner__eyebrow">${banner.title}</p>
-      <strong>${banner.body}</strong>
-      <span>${banner.detail}</span>
-    </div>
-  `;
-}
-
-function computeWorkspaceReadiness() {
-  const urlCount = countUrlEntries();
-  const fileCount = document.querySelector("#files").files.length;
-  const manualCount = countManualEntries();
-  const estimatedDocuments = (state.includeSampleData ? SAMPLE_DOCUMENTS.length : 0) + urlCount + fileCount + manualCount;
-
-  let tone = "warning";
-  let headline = "Add at least two documents to start";
-  let detail = "The analysis needs at least two documents. The fastest path is the demo setup or a small file upload set.";
-
-  if (estimatedDocuments >= 2) {
-    tone = "ready";
-    headline = "Ready to run analysis";
-    detail =
-      "You have enough source material to run the workflow. The app will start with document-level evaluation, then move into duplicate groups and detailed review surfaces.";
-  } else if (estimatedDocuments === 1) {
-    headline = "Almost ready";
-    detail = "One document is loaded. Add one more source so the rationalization analysis can compare documents meaningfully.";
-  }
-
-  return {
-    tone,
-    headline,
-    detail,
-    estimatedDocuments,
-    sampleEnabled: state.includeSampleData,
-    urlCount,
-    fileCount,
-    manualCount,
-  };
-}
-
-function renderReadinessCard() {
-  const target = document.querySelector("[data-readiness-card]");
-  if (!target) {
-    return;
-  }
-
-  const readiness = computeWorkspaceReadiness();
-  target.className = `readiness-card readiness-card--${readiness.tone}`;
-  target.innerHTML = `
-    <div class="readiness-card__header">
-      <strong>${readiness.headline}</strong>
-      <span class="doc-badge ${readiness.tone === "ready" ? "doc-badge--ok" : "doc-badge--warn"}">
-        ${readiness.estimatedDocuments} estimated doc${readiness.estimatedDocuments === 1 ? "" : "s"}
-      </span>
-    </div>
-    <p>${readiness.detail}</p>
-    <ul class="readiness-list">
-      <li>Demo library: ${readiness.sampleEnabled ? "included" : "off"}</li>
-      <li>URLs loaded: ${readiness.urlCount}</li>
-      <li>Files selected: ${readiness.fileCount}</li>
-      <li>Manual docs with text: ${readiness.manualCount}</li>
-    </ul>
-  `;
-}
-
-function setActiveSourceTab(tab) {
-  state.activeSourceTab = tab;
-  document.querySelectorAll("[data-source-tab]").forEach((button) => {
-    button.classList.toggle("active", button.getAttribute("data-source-tab") === tab);
-  });
-  document.querySelectorAll("[data-source-panel]").forEach((panel) => {
-    panel.classList.toggle("is-active", panel.getAttribute("data-source-panel") === tab);
-  });
-}
-
-function renderEmptyResults() {
-  const output = document.querySelector("[data-results]");
-  output.innerHTML = `
-    <section class="results-shell">
-      <div class="panel table-panel">
-        <div class="empty-state">
-          <p class="eyebrow">Ready to analyze</p>
-          <h2>Start with the demo or assemble your own document set</h2>
-          <p>
-            The cleanest path is to load the demo setup, then run the analysis to show the full workflow.
-            For real work, add public URLs, uploads, or pasted text and run the same process.
-          </p>
-          <ol class="empty-state__steps">
-            <li>Choose the demo path or add your own sources.</li>
-            <li>Adjust the similarity threshold if needed.</li>
-            <li>Run the analysis and start with document level evaluation before consolidation review.</li>
-          </ol>
-        </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderStatus(message, tone = "neutral") {
-  const status = document.querySelector("[data-status]");
-  status.textContent = message;
-  status.dataset.tone = tone;
 }
 
 export function buildAnalysisProgressView(progress) {
@@ -487,55 +370,6 @@ export function buildAnalysisProgressView(progress) {
   };
 }
 
-function renderProgressStatus(progress) {
-  const status = document.querySelector("[data-status]");
-  const view = buildAnalysisProgressView(progress);
-  status.dataset.tone = "loading";
-  status.innerHTML = `
-    <div class="status__eyebrow">Analysis in progress</div>
-    <strong class="status__headline">${escapeHtml(view.headline)}</strong>
-    <p class="status__detail">${escapeHtml(view.detail)}</p>
-    <ul class="status__steps">
-      ${view.steps
-        .map(
-          (step) => `
-            <li class="status__step status__step--${step.state}">
-              <span class="status__step-dot" aria-hidden="true"></span>
-              <div>
-                <strong>${escapeHtml(step.label)}</strong>
-                <span>${escapeHtml(step.detail)}</span>
-              </div>
-            </li>
-          `
-        )
-        .join("")}
-    </ul>
-  `;
-}
-
-function setAnalysisBusy(isBusy) {
-  const selectors = [
-    "[data-analyze]",
-    "[data-run-demo]",
-    "[data-load-sample-urls]",
-    "[data-reset-workspace]",
-    "[data-source-tab]",
-    "#include-sample",
-    "#threshold",
-    "#threshold-slider",
-    "#urls",
-    "#files",
-    "[data-add-manual]",
-    ".manual-card__title",
-    ".manual-card__text",
-    "[data-remove-manual]",
-  ];
-
-  document.querySelectorAll(selectors.join(",")).forEach((node) => {
-    node.disabled = isBusy;
-  });
-}
-
 function formatDeploymentTimestamp(value) {
   try {
     return new Intl.DateTimeFormat(undefined, {
@@ -575,338 +409,732 @@ async function loadDeploymentBadge() {
 
     const payload = await response.json();
     const updatedAt = payload.updated_at || payload.created_at;
-    setDeploymentBadge(
-      "Last updated:",
-      formatDeploymentTimestamp(updatedAt)
-    );
+    setDeploymentBadge("Last updated:", formatDeploymentTimestamp(updatedAt));
   } catch {
-    const fallback = document.lastModified
+    const fallback = typeof document !== "undefined" && document.lastModified
       ? formatDeploymentTimestamp(document.lastModified)
       : "timestamp unavailable";
     setDeploymentBadge("Last updated:", fallback);
   }
 }
 
-function loadDemoSetup() {
-  const toggle = document.querySelector("#include-sample");
-  const urlsField = document.querySelector("#urls");
-  toggle.checked = true;
-  state.includeSampleData = true;
-  urlsField.value = SAMPLE_URLS.join("\n");
-  setActiveSourceTab("demo");
-  updateSourceSummary();
-  renderDemoBanner();
-  renderReadinessCard();
-  renderStatus(
-    "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
-  );
+function computeWorkspaceReadiness() {
+  const urlCount = countUrlEntries();
+  const fileCount = state.workspace.uploadedFiles.length;
+  const manualCount = countManualEntries();
+  const estimatedDocuments = (state.includeSampleData ? SAMPLE_DOCUMENTS.length : 0) + urlCount + fileCount + manualCount;
+
+  let tone = "warning";
+  let headline = "Add at least two documents to start";
+  let detail = "The analysis needs at least two documents. The fastest path is the demo setup or a small file upload set.";
+
+  if (estimatedDocuments >= 2) {
+    tone = "ready";
+    headline = "Ready to run analysis";
+    detail =
+      "You have enough source material to run the workflow. The app will move from source intake into one focused review page at a time.";
+  } else if (estimatedDocuments === 1) {
+    headline = "Almost ready";
+    detail = "One document is loaded. Add one more source so the rationalization analysis can compare documents meaningfully.";
+  }
+
+  return {
+    tone,
+    headline,
+    detail,
+    estimatedDocuments,
+    sampleEnabled: state.includeSampleData,
+    urlCount,
+    fileCount,
+    manualCount,
+  };
 }
 
-function resetWorkspace() {
-  const toggle = document.querySelector("#include-sample");
-  const urlsField = document.querySelector("#urls");
-  const filesField = document.querySelector("#files");
-  const manualContainer = document.querySelector("[data-manual-documents]");
-
-  toggle.checked = false;
-  state.includeSampleData = false;
-  urlsField.value = "";
-  filesField.value = "";
-  manualContainer.innerHTML = "";
-  ensureMinimumManualCards();
-
-  state.analysisView.query = "";
-  state.analysisView.filter = "all";
-  state.analysisView.documents = [];
-  state.analysisView.threshold = 0.45;
-  state.analysisView.levelOverrides = {};
-  state.analysisView.currentWorkflowStep = "levelSection";
-  state.analysisView.usedSampleData = false;
-  state.analysisView.result = null;
-  state.analysisView.issues = [];
-
-  setActiveSourceTab("demo");
-  updateSourceSummary();
-  renderDemoBanner();
-  renderReadinessCard();
-  renderEmptyResults();
-  renderStatus("Workspace reset. Add demo data or your own documents to begin again.");
+function buildReadinessCardMarkup() {
+  const readiness = computeWorkspaceReadiness();
+  return `
+    <div class="readiness-card readiness-card--${readiness.tone}">
+      <div class="readiness-card__header">
+        <strong>${readiness.headline}</strong>
+        <span class="doc-badge ${readiness.tone === "ready" ? "doc-badge--ok" : "doc-badge--warn"}">
+          ${readiness.estimatedDocuments} estimated doc${readiness.estimatedDocuments === 1 ? "" : "s"}
+        </span>
+      </div>
+      <p>${readiness.detail}</p>
+      <ul class="readiness-list">
+        <li>Demo library: ${readiness.sampleEnabled ? "included" : "off"}</li>
+        <li>URLs loaded: ${readiness.urlCount}</li>
+        <li>Staged files: ${readiness.fileCount}</li>
+        <li>Manual docs with text: ${readiness.manualCount}</li>
+      </ul>
+    </div>
+  `;
 }
 
-function renderResults(result, issues) {
-  state.analysisView.result = result;
-  state.analysisView.issues = issues;
-  renderAnalysisView();
-}
-
-function renderAnalysisView() {
-  const output = document.querySelector("[data-results]");
-  const { result, issues, query, filter } = state.analysisView;
-  if (!result) {
-    output.innerHTML = "";
+function renderStatus(message, tone = "neutral") {
+  const status = document.querySelector("[data-status]");
+  if (!status) {
     return;
   }
+  status.textContent = message;
+  status.dataset.tone = tone;
+}
 
-  if (!WORKFLOW_SEQUENCE.includes(state.analysisView.currentWorkflowStep)) {
-    state.analysisView.currentWorkflowStep = WORKFLOW_SEQUENCE[0];
+function renderProgressStatus(progress) {
+  const status = document.querySelector("[data-status]");
+  if (!status) {
+    return;
+  }
+  const view = buildAnalysisProgressView(progress);
+  status.dataset.tone = "loading";
+  status.innerHTML = `
+    <div class="status__eyebrow">Analysis in progress</div>
+    <strong class="status__headline">${escapeHtml(view.headline)}</strong>
+    <p class="status__detail">${escapeHtml(view.detail)}</p>
+    <ul class="status__steps">
+      ${view.steps
+        .map(
+          (step) => `
+            <li class="status__step status__step--${step.state}">
+              <span class="status__step-dot" aria-hidden="true"></span>
+              <div>
+                <strong>${escapeHtml(step.label)}</strong>
+                <span>${escapeHtml(step.detail)}</span>
+              </div>
+            </li>
+          `
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+function buildManualCardsMarkup() {
+  return normalizeManualEntries(state.workspace.manualEntries)
+    .map(
+      (entry, index) => `
+        <article class="manual-card">
+          <div class="manual-card__header">
+            <input
+              class="manual-card__title"
+              type="text"
+              placeholder="Document title"
+              value="${escapeHtml(entry.title)}"
+              data-manual-title
+              data-manual-index="${index}"
+            >
+            <button
+              class="ghost-button ghost-button--small"
+              type="button"
+              data-remove-manual
+              data-manual-index="${index}"
+            >Remove</button>
+          </div>
+          <textarea
+            class="manual-card__text"
+            rows="7"
+            placeholder="Paste policy or standard text here"
+            data-manual-text
+            data-manual-index="${index}"
+          >${escapeHtml(entry.text)}</textarea>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function buildUploadedFilesMarkup() {
+  if (!state.workspace.uploadedFiles.length) {
+    return `<p class="hint">No uploaded files are currently staged.</p>`;
   }
 
+  return `
+    <ul class="source-list staged-file-list">
+      ${state.workspace.uploadedFiles
+        .map(
+          (file) => `
+            <li>
+              <strong>${escapeHtml(file.name)}</strong>
+              <span>Loaded into this review session</span>
+            </li>
+          `
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+function buildSourcesStepMarkup() {
+  const route = getWizardRoute("sources");
+  const hasAnalysis = getHasAnalysis();
+  return `
+    <section class="wizard-step-page">
+      <div class="wizard-step-page__header">
+        <p class="eyebrow">${route.step}</p>
+        <h2>${route.title}</h2>
+        <p class="section-subtitle">${route.subtitle}</p>
+      </div>
+
+      ${buildDemoBannerMarkup("workspace")}
+
+      <div class="wizard-grid wizard-grid--sources">
+        <section class="panel table-panel">
+          <div class="step-card-header">
+            <h3>Source workspace</h3>
+            <p class="section-subtitle">Pick the demo path or assemble your own inputs before running the analysis.</p>
+          </div>
+          <div class="workspace-switcher">
+            <div class="toggle-group toggle-group--full">
+              <button class="toggle-btn ${state.activeSourceTab === "demo" ? "active" : ""}" type="button" data-source-tab="demo">Demo</button>
+              <button class="toggle-btn ${state.activeSourceTab === "urls" ? "active" : ""}" type="button" data-source-tab="urls">URLs</button>
+              <button class="toggle-btn ${state.activeSourceTab === "files" ? "active" : ""}" type="button" data-source-tab="files">Files</button>
+              <button class="toggle-btn ${state.activeSourceTab === "manual" ? "active" : ""}" type="button" data-source-tab="manual">Manual</button>
+            </div>
+            <div class="source-summary" data-source-summary-live>${buildSourceSummaryMarkup()}</div>
+          </div>
+
+          <div class="source-panel ${state.activeSourceTab === "demo" ? "is-active" : ""}">
+            <p class="eyebrow">Demo path</p>
+            <h3>Walk through the full workflow with one click</h3>
+            <p class="section-subtitle">Use illustrative sample documents and example URLs to show the wizard flow to your team quickly.</p>
+            <div class="flow-card">
+              <strong>Recommended for first-time reviewers</strong>
+              <p>Load the guided demo setup or run the full demo analysis to move straight into Step 2.</p>
+              <div class="control-row">
+                <button class="ghost-button" type="button" data-load-demo>Load demo setup</button>
+                <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
+              </div>
+            </div>
+            <div class="flow-card flow-card--compact">
+              <label class="toggle" for="include-sample">
+                <input id="include-sample" type="checkbox" ${state.includeSampleData ? "checked" : ""}>
+                Include the built-in demo library during analysis
+              </label>
+              <p class="hint">Keep this on for walkthroughs. Turn it off when you only want to assess real uploaded or pasted documents.</p>
+            </div>
+          </div>
+
+          <div class="source-panel ${state.activeSourceTab === "urls" ? "is-active" : ""}">
+            <p class="eyebrow">URL imports</p>
+            <h3>Paste URLs to public exports or pages</h3>
+            <div class="field">
+              <label for="urlsText">One URL per line</label>
+              <textarea id="urlsText" data-urls-input placeholder="https://example.com/policy-a&#10;https://docs.google.com/document/d/.../edit">${escapeHtml(state.workspace.urlsText)}</textarea>
+              <p class="hint">Browser fetches are limited by public access and CORS. If a source is private or blocked, upload an export instead.</p>
+            </div>
+          </div>
+
+          <div class="source-panel ${state.activeSourceTab === "files" ? "is-active" : ""}">
+            <p class="eyebrow">File imports</p>
+            <h3>Stage exported source material</h3>
+            <div class="field">
+              <label for="sourceFiles">Accepted file types</label>
+              <input id="sourceFiles" type="file" accept=".txt,.md,.markdown,.csv" multiple data-source-files>
+              <p class="hint">Uploaded files are cached into this review session so they survive step-to-step navigation.</p>
+            </div>
+            <div class="control-row">
+              <button class="ghost-button ghost-button--small" type="button" data-clear-files ${state.workspace.uploadedFiles.length ? "" : "disabled"}>Clear staged files</button>
+            </div>
+            ${buildUploadedFilesMarkup()}
+          </div>
+
+          <div class="source-panel ${state.activeSourceTab === "manual" ? "is-active" : ""}">
+            <p class="eyebrow">Manual paste</p>
+            <h3>Add documents directly</h3>
+            <div class="manual-stack">${buildManualCardsMarkup()}</div>
+            <div class="control-row">
+              <button class="ghost-button" type="button" data-add-manual>Add another document</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel table-panel">
+          <div class="step-card-header">
+            <h3>Run settings</h3>
+            <p class="section-subtitle">Adjust the similarity threshold and confirm the document set before you move into the review pages.</p>
+          </div>
+          <div class="field">
+            <label for="thresholdSlider">Similarity threshold</label>
+            <div class="threshold-row">
+              <input id="thresholdSlider" type="range" min="0.2" max="0.9" step="0.01" value="${state.analysisView.threshold.toFixed(2)}" data-threshold-slider>
+              <input id="thresholdInput" type="number" min="0.2" max="0.9" step="0.01" value="${state.analysisView.threshold.toFixed(2)}" data-threshold-input>
+            </div>
+            <p class="hint">Lower values broaden clustering. Higher values keep only stronger near-duplicates.</p>
+          </div>
+
+          <div data-readiness-live>${buildReadinessCardMarkup()}</div>
+
+          <div class="control-row control-row--spaced">
+            <button class="primary-button" type="button" data-analyze>Analyze document set</button>
+            <button class="ghost-button" type="button" data-reset-workspace>Reset inputs</button>
+          </div>
+
+          ${hasAnalysis ? `
+            <div class="flow-card flow-card--compact">
+              <strong>Last analysis is ready</strong>
+              <p>${pluralize(state.analysisView.result.documents.length, "document")} analyzed with a ${state.analysisView.threshold.toFixed(2)} similarity threshold.</p>
+              <div class="control-row">
+                <button class="primary-button" type="button" data-route="level-review">Continue to Step 2</button>
+              </div>
+            </div>
+          ` : ""}
+        </section>
+      </div>
+
+      ${buildStepFooter("sources")}
+    </section>
+  `;
+}
+
+function buildStepHero(routeId, context) {
+  const route = getWizardRoute(routeId);
+  return `
+    <div class="wizard-step-page__header">
+      <p class="eyebrow">${route.step}</p>
+      <h2>${route.title}</h2>
+      <p class="section-subtitle">${route.subtitle}</p>
+      ${context || ""}
+    </div>
+  `;
+}
+
+function buildAnalysisSummaryMarkup() {
+  const result = state.analysisView.result;
   const summary = buildSummary(result);
-  const filtered = filterAnalysisView(result, issues, query, filter);
-  const workflowStates = buildWorkflowStepStates(state.analysisView.currentWorkflowStep);
-  const levelHtml = buildLevelMarkup(filtered.documents);
-  const groupsHtml = buildGroupMarkup(result, filtered.groups);
-  const pairsHtml = buildPairMarkup(result, filtered.edges);
-  const issuesHtml = buildIssuesMarkup(filtered.issues);
-  const documentsHtml = buildDocumentMarkup(filtered.documents);
   const strongestGroup = result.groups[0];
   const strongestCanonical = strongestGroup
     ? result.documents.find((document) => document.id === strongestGroup.recommendedPrimaryId)?.title || "None"
     : "None";
-  const viewModel = buildDocumentViewModel(result);
-  const kpiCards = [
-    {
-      label: "Level review",
-      value: viewModel.filter((document) => document.documentLevel.levelFit !== "aligned").length,
-      filter: "level",
-      target: "levelSection",
-      tone: "warning",
-      helper: "Documents operating at the wrong requirement level.",
-    },
-    {
-      label: "Review flags",
-      value: result.groups.filter((group) => groupHasReviewFlags(group)).length,
-      filter: "review",
-      target: "groupsSection",
-      tone: "warning",
-      helper: "Groups with mixed level, scope, or procedural concerns.",
-    },
-    {
-      label: "Cleaner fits",
-      value: result.groups.filter((group) => !groupHasReviewFlags(group)).length,
-      filter: "ready",
-      target: "groupsSection",
-      tone: "success",
-      helper: "Groups that appear cleaner for consolidation review.",
-    },
-    {
-      label: "Ungrouped docs",
-      value: viewModel.filter((document) => document.groupLabel === "Ungrouped").length,
-      filter: "orphan",
-      target: "documentsSection",
-      tone: "info",
-      helper: "Documents not currently assigned to a duplicate cluster.",
-    },
-  ];
-
-  output.innerHTML = `
-    <section class="results-shell">
-      <div class="panel table-panel">
-        ${state.analysisView.usedSampleData ? buildResultsDemoBannerMarkup() : ""}
-        <div class="results-hero">
-          <div>
-          <p class="eyebrow">Analysis complete</p>
-            <h2>Consolidation candidates and review flags</h2>
-            <p class="section-subtitle">
-              Strongest canonical candidate: ${strongestCanonical}
-            </p>
-            <p>${summary}</p>
-          </div>
-          <div class="snapshot-kpis results-stats">
-            ${kpiCards
-              .map((card) => buildShortcutCard(card, filter))
-              .join("")}
-          </div>
+  return `
+    ${buildDemoBannerMarkup("results")}
+    <div class="panel table-panel summary-strip">
+      <div class="results-hero">
+        <div>
+          <p class="eyebrow">Analysis snapshot</p>
+          <h3>Current review context</h3>
+          <p class="section-subtitle">Strongest canonical candidate: ${strongestCanonical}</p>
+          <p>${summary}</p>
+        </div>
+        <div class="snapshot-kpis results-stats">
+          <article class="panel snapshot-kpi-card">
+            <span class="snapshot-kpi-label">Documents</span>
+            <span class="snapshot-kpi-value info">${result.documents.length}</span>
+          </article>
+          <article class="panel snapshot-kpi-card">
+            <span class="snapshot-kpi-label">Pairs</span>
+            <span class="snapshot-kpi-value warning">${result.edges.length}</span>
+          </article>
+          <article class="panel snapshot-kpi-card">
+            <span class="snapshot-kpi-label">Groups</span>
+            <span class="snapshot-kpi-value success">${result.groups.length}</span>
+          </article>
         </div>
       </div>
+    </div>
+  `;
+}
 
-      <section class="panel table-panel" id="analysisExplorer">
+function buildLevelReviewStepMarkup() {
+  const levelHtml = buildLevelMarkup(state.analysisView.result.documents);
+  return `
+    <section class="wizard-step-page">
+      ${buildStepHero("level-review")}
+      ${buildAnalysisSummaryMarkup()}
+      <section class="panel table-panel">
+        <div class="step-card-header">
+          <h3>Document level evaluation</h3>
+          <p class="section-subtitle">Review the inferred type, apply overrides where needed, and correct policy-versus-standard-versus-procedure mismatches before consolidation.</p>
+        </div>
+        <div class="results-section">${levelHtml}</div>
+      </section>
+      ${buildStepFooter("level-review")}
+    </section>
+  `;
+}
+
+function buildGroupsStepMarkup() {
+  const groupsHtml = buildGroupMarkup(state.analysisView.result, state.analysisView.result.groups);
+  return `
+    <section class="wizard-step-page">
+      ${buildStepHero("groups")}
+      ${buildAnalysisSummaryMarkup()}
+      <section class="panel table-panel">
+        <div class="step-card-header">
+          <h3>Recommended consolidation groups</h3>
+          <p class="section-subtitle">Work through canonical candidates, confirm blocker flags, and decide whether a cluster is ready for policy-owner review.</p>
+        </div>
+        <div class="results-section">${groupsHtml}</div>
+      </section>
+      ${buildStepFooter("groups")}
+    </section>
+  `;
+}
+
+function buildDetailsStepMarkup() {
+  const filtered = filterAnalysisView(
+    state.analysisView.result,
+    state.analysisView.issues,
+    state.analysisView.query,
+    state.analysisView.filter
+  );
+  const documentsHtml = buildDocumentMarkup(filtered.documents);
+  const pairsHtml = buildPairMarkup(state.analysisView.result, filtered.edges);
+
+  return `
+    <section class="wizard-step-page">
+      ${buildStepHero("details")}
+      ${buildAnalysisSummaryMarkup()}
+      <section class="panel table-panel">
         <div class="analysis-controls">
           <div class="search-header">
-            <h3>Analysis explorer</h3>
+            <h3>Detail explorer</h3>
             <div class="search-bar">
               <input
                 type="text"
                 id="analysisSearch"
                 placeholder="Search titles, sources, canonical candidates, or recommendations..."
                 autocomplete="off"
-                value="${escapeHtml(query)}"
-              />
-              <span class="search-count">${filtered.groups.length} groups / ${filtered.documents.length} docs</span>
+                value="${escapeHtml(state.analysisView.query)}"
+              >
+              <span class="search-count">${filtered.documents.length} docs / ${filtered.edges.length} pairs</span>
             </div>
           </div>
-          <div class="export-actions">
-            <button class="ghost-button ghost-button--small" type="button" data-export-format="csv">
-              Export CSV
-            </button>
-            <button class="ghost-button ghost-button--small" type="button" data-export-format="md">
-              Export Markdown
-            </button>
+          <div class="filter-toolbar">
+            <div class="toggle-group" data-filter-group>
+              ${buildFilterButton("all", "All", state.analysisView.filter)}
+              ${buildFilterButton("level", "Level review", state.analysisView.filter)}
+              ${buildFilterButton("review", "Review flags", state.analysisView.filter)}
+              ${buildFilterButton("ready", "Cleaner fits", state.analysisView.filter)}
+              ${buildFilterButton("orphan", "Ungrouped docs", state.analysisView.filter)}
+            </div>
+            <p class="section-subtitle">Filters only affect this detail page and the export page output.</p>
           </div>
-        </div>
-        <div class="filter-toolbar">
-          <div class="toggle-group" data-filter-group>
-            ${buildFilterButton("all", "All", filter)}
-            ${buildFilterButton("level", "Level review", filter)}
-            ${buildFilterButton("review", "Review flags", filter)}
-            ${buildFilterButton("ready", "Cleaner fits", filter)}
-            ${buildFilterButton("orphan", "Ungrouped docs", filter)}
-          </div>
-          <p class="section-subtitle">
-            Search and filters update the review surface without rerunning the analysis. Exports reflect the current filtered view.
-          </p>
         </div>
       </section>
-
-      <section class="workflow-panel">
-        <div class="panel table-panel workflow-intro">
-          <div class="results-section-heading">
-            <p class="eyebrow">Review sequence</p>
-            <h3>Work through the rationalization in order</h3>
-            <p class="section-subtitle">Start with document level fit, then move into consolidation candidates, supporting evidence, and import blockers.</p>
+      <div class="wizard-grid wizard-grid--details">
+        <section class="panel table-panel">
+          <div class="step-card-header">
+            <h3>Analyzed documents</h3>
+            <p class="section-subtitle">Browse the document set with cluster membership and review posture.</p>
           </div>
-        </div>
-
-        <article class="workflow-step workflow-step--${workflowStates.levelSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "levelSection" ? "" : "collapsed"}" id="levelSection">
-          <div class="workflow-step__rail">
-            <span class="workflow-step__number"><span class="workflow-step__number-text">1</span></span>
-            <span class="workflow-step__line" aria-hidden="true"></span>
+          <div class="results-section">${documentsHtml}</div>
+        </section>
+        <section class="panel table-panel">
+          <div class="step-card-header">
+            <h3>Top similarity pairs</h3>
+            <p class="section-subtitle">Use pair-level overlap to spot near-duplicates that may not form a full cluster yet.</p>
           </div>
-          <div class="workflow-step__content">
-            <div class="collapsible-header" data-toggle="levelSection">
-              <div class="collapsible-title-group">
-                <div class="workflow-step__heading-row">
-                  <p class="workflow-step__eyebrow">Step 1</p>
-                  <span class="workflow-step__status workflow-step__status--${workflowStates.levelSection}">${formatWorkflowStateLabel(workflowStates.levelSection)}</span>
-                </div>
-                <h3>Document level evaluation</h3>
-                <p class="section-subtitle">Check whether each document is operating at the right level of requirements before consolidation.</p>
-              </div>
-              <span class="collapse-icon"></span>
-            </div>
-            <div class="collapsible-body">
-              <div class="results-section">
-                ${levelHtml}
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="workflow-step workflow-step--${workflowStates.groupsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "groupsSection" ? "" : "collapsed"}" id="groupsSection">
-          <div class="workflow-step__rail">
-            <span class="workflow-step__number"><span class="workflow-step__number-text">2</span></span>
-            <span class="workflow-step__line" aria-hidden="true"></span>
-          </div>
-          <div class="workflow-step__content">
-            <div class="collapsible-header" data-toggle="groupsSection">
-              <div class="collapsible-title-group">
-                <div class="workflow-step__heading-row">
-                  <p class="workflow-step__eyebrow">Step 2</p>
-                  <span class="workflow-step__status workflow-step__status--${workflowStates.groupsSection}">${formatWorkflowStateLabel(workflowStates.groupsSection)}</span>
-                </div>
-                <h3>Consolidation groups</h3>
-                <p class="section-subtitle">Review canonical candidates, review checks, and source membership for each duplicate cluster.</p>
-              </div>
-              <span class="collapse-icon"></span>
-            </div>
-            <div class="collapsible-body">
-              <div class="results-section">
-                ${groupsHtml}
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="workflow-step workflow-step--${workflowStates.documentsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "documentsSection" ? "" : "collapsed"}" id="documentsSection">
-          <div class="workflow-step__rail">
-            <span class="workflow-step__number"><span class="workflow-step__number-text">3</span></span>
-            <span class="workflow-step__line" aria-hidden="true"></span>
-          </div>
-          <div class="workflow-step__content">
-            <div class="collapsible-header" data-toggle="documentsSection">
-              <div class="collapsible-title-group">
-                <div class="workflow-step__heading-row">
-                  <p class="workflow-step__eyebrow">Step 3</p>
-                  <span class="workflow-step__status workflow-step__status--${workflowStates.documentsSection}">${formatWorkflowStateLabel(workflowStates.documentsSection)}</span>
-                </div>
-                <h3>Document review surface</h3>
-                <p class="section-subtitle">Browse the analyzed source set with cluster membership and inherited review posture.</p>
-              </div>
-              <span class="collapse-icon"></span>
-            </div>
-            <div class="collapsible-body">
-              <div class="results-section">
-                ${documentsHtml}
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="workflow-step workflow-step--${workflowStates.pairsSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "pairsSection" ? "" : "collapsed"}" id="pairsSection">
-          <div class="workflow-step__rail">
-            <span class="workflow-step__number"><span class="workflow-step__number-text">4</span></span>
-            <span class="workflow-step__line" aria-hidden="true"></span>
-          </div>
-          <div class="workflow-step__content">
-            <div class="collapsible-header" data-toggle="pairsSection">
-              <div class="collapsible-title-group">
-                <div class="workflow-step__heading-row">
-                  <p class="workflow-step__eyebrow">Step 4</p>
-                  <span class="workflow-step__status workflow-step__status--${workflowStates.pairsSection}">${formatWorkflowStateLabel(workflowStates.pairsSection)}</span>
-                </div>
-                <h3>Pair overlap triage</h3>
-                <p class="section-subtitle">Use the strongest similarity pairs to spot near-duplicates that may not form a full cluster yet.</p>
-              </div>
-              <span class="collapse-icon"></span>
-            </div>
-            <div class="collapsible-body">
-              <div class="results-section">
-                ${pairsHtml}
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="workflow-step workflow-step--last workflow-step--${workflowStates.issuesSection} panel table-panel collapsible ${state.analysisView.currentWorkflowStep === "issuesSection" ? "" : "collapsed"}" id="issuesSection">
-          <div class="workflow-step__rail">
-            <span class="workflow-step__number"><span class="workflow-step__number-text">5</span></span>
-          </div>
-          <div class="workflow-step__content">
-            <div class="collapsible-header" data-toggle="issuesSection">
-              <div class="collapsible-title-group">
-                <div class="workflow-step__heading-row">
-                  <p class="workflow-step__eyebrow">Step 5</p>
-                  <span class="workflow-step__status workflow-step__status--${workflowStates.issuesSection}">${formatWorkflowStateLabel(workflowStates.issuesSection)}</span>
-                </div>
-                <h3>Import issues and blockers</h3>
-                <p class="section-subtitle">Review CORS, authentication, parsing, and empty-content warnings that could affect confidence in the analysis.</p>
-              </div>
-              <span class="collapse-icon"></span>
-            </div>
-            <div class="collapsible-body">
-              <div class="results-section">
-                ${issuesHtml}
-              </div>
-            </div>
-          </div>
-        </article>
-      </section>
+          <div class="results-section">${pairsHtml}</div>
+        </section>
+      </div>
+      ${buildStepFooter("details")}
     </section>
   `;
-
-  wireCollapsibles(output);
-  wireResultControls(output);
 }
 
-function buildResultsDemoBannerMarkup() {
-  const banner = buildDemoBannerContent(SAMPLE_DOCUMENTS.length, "results");
+function buildExportStepMarkup() {
+  const filtered = filterAnalysisView(
+    state.analysisView.result,
+    state.analysisView.issues,
+    state.analysisView.query,
+    state.analysisView.filter
+  );
+  const issuesHtml = buildIssuesMarkup(filtered.issues);
   return `
-    <div class="demo-banner demo-banner--results">
-      <p class="demo-banner__eyebrow">${banner.title}</p>
-      <strong>${banner.body}</strong>
-      <span>${banner.detail}</span>
+    <section class="wizard-step-page">
+      ${buildStepHero("export", `
+        <p class="section-subtitle wizard-export-note">Current export view: ${state.analysisView.filter} filter${state.analysisView.query ? ` with search \"${escapeHtml(state.analysisView.query)}\"` : ""}.</p>
+      `)}
+      ${buildAnalysisSummaryMarkup()}
+      <div class="wizard-grid wizard-grid--export">
+        <section class="panel table-panel">
+          <div class="step-card-header">
+            <h3>Export outputs</h3>
+            <p class="section-subtitle">Download the current review view in CSV or Markdown format for sharing and follow-up.</p>
+          </div>
+          <div class="control-row control-row--spaced">
+            <button class="primary-button" type="button" data-export-format="csv">Export CSV</button>
+            <button class="ghost-button" type="button" data-export-format="md">Export Markdown</button>
+          </div>
+          <div class="flow-card flow-card--compact">
+            <strong>What gets exported</strong>
+            <p>The export reflects the current filter, search state, reviewer overrides, and visible issues from this wizard session.</p>
+          </div>
+        </section>
+
+        <section class="panel table-panel">
+          <div class="step-card-header">
+            <h3>Import issues and blockers</h3>
+            <p class="section-subtitle">Capture any fetch, auth, parsing, or empty-content warnings before sharing the analysis.</p>
+          </div>
+          <div class="results-section">${issuesHtml}</div>
+        </section>
+      </div>
+      ${buildStepFooter("export")}
+    </section>
+  `;
+}
+
+function buildStepFooter(routeId) {
+  const currentIndex = WIZARD_ROUTES.findIndex((route) => route.id === routeId);
+  const previousRoute = currentIndex > 0 ? WIZARD_ROUTES[currentIndex - 1] : null;
+  const nextRoute = currentIndex < WIZARD_ROUTES.length - 1 ? WIZARD_ROUTES[currentIndex + 1] : null;
+  const canContinue = routeId === "sources" ? getHasAnalysis() : Boolean(nextRoute);
+  const nextDisabled = routeId === "sources" ? !getHasAnalysis() : !nextRoute;
+
+  return `
+    <footer class="wizard-footer">
+      <div>
+        ${previousRoute ? `<button class="ghost-button" type="button" data-route="${previousRoute.id}">Back</button>` : ""}
+      </div>
+      <div class="wizard-footer__meta">${getWizardRoute(routeId).step} of ${WIZARD_ROUTES.length}</div>
+      <div>
+        ${canContinue && nextRoute ? `<button class="primary-button" type="button" data-route="${nextRoute.id}">Next</button>` : ""}
+        ${routeId === "sources" && !canContinue ? `<button class="primary-button" type="button" disabled>Run analysis to continue</button>` : ""}
+      </div>
+    </footer>
+  `;
+}
+
+function buildWizardRouteStates() {
+  const currentIndex = WIZARD_ROUTES.findIndex((route) => route.id === state.route);
+  const hasAnalysis = getHasAnalysis();
+
+  return Object.fromEntries(
+    WIZARD_ROUTES.map((route, index) => {
+      if (route.id !== "sources" && !hasAnalysis) {
+        return [route.id, "locked"];
+      }
+      if (index < currentIndex) {
+        return [route.id, "complete"];
+      }
+      if (index === currentIndex) {
+        return [route.id, "current"];
+      }
+      return [route.id, "upcoming"];
+    })
+  );
+}
+
+function renderProgressHeader() {
+  const target = document.querySelector("[data-step-progress]");
+  if (!target) {
+    return;
+  }
+  const routeStates = buildWizardRouteStates();
+  target.innerHTML = `
+    <div class="wizard-progress-header">
+      <div>
+        <p class="eyebrow">Guided review flow</p>
+        <h2>One step at a time</h2>
+        <p class="section-subtitle">Move through the process page by page so reviewers always know what is done, what is current, and what comes next.</p>
+      </div>
+      <nav class="wizard-route-list" aria-label="Wizard progress">
+        ${WIZARD_ROUTES.map((route, index) => {
+          const stateLabel = routeStates[route.id];
+          const disabled = stateLabel === "locked" || state.isBusy;
+          return `
+            <button
+              class="wizard-route wizard-route--${stateLabel}"
+              type="button"
+              data-route="${route.id}"
+              ${disabled ? "disabled" : ""}
+            >
+              <span class="wizard-route__number">${index + 1}</span>
+              <span class="wizard-route__text">
+                <strong>${route.title}</strong>
+                <span>${stateLabel === "locked" ? "Run analysis first" : route.step}</span>
+              </span>
+            </button>
+          `;
+        }).join("")}
+      </nav>
     </div>
   `;
+}
+
+function renderCurrentStep() {
+  const target = document.querySelector("[data-step-content]");
+  if (!target) {
+    return;
+  }
+
+  if (!getHasAnalysis() && state.route !== "sources") {
+    state.route = "sources";
+  }
+
+  let markup = "";
+  if (state.route === "sources") {
+    markup = buildSourcesStepMarkup();
+  } else if (state.route === "level-review") {
+    markup = buildLevelReviewStepMarkup();
+  } else if (state.route === "groups") {
+    markup = buildGroupsStepMarkup();
+  } else if (state.route === "details") {
+    markup = buildDetailsStepMarkup();
+  } else {
+    markup = buildExportStepMarkup();
+  }
+
+  target.innerHTML = markup;
+  wireStepEvents(target);
+}
+
+function renderApp() {
+  persistState();
+  renderProgressHeader();
+  renderCurrentStep();
+  if (state.isBusy) {
+    setAnalysisBusy(true);
+  }
+}
+
+function refreshSourcesStepFragments() {
+  const summaryTarget = document.querySelector("[data-source-summary-live]");
+  if (summaryTarget) {
+    summaryTarget.innerHTML = buildSourceSummaryMarkup();
+  }
+  const readinessTarget = document.querySelector("[data-readiness-live]");
+  if (readinessTarget) {
+    readinessTarget.innerHTML = buildReadinessCardMarkup();
+  }
+}
+
+function setAnalysisBusy(isBusy) {
+  state.isBusy = isBusy;
+  document.querySelectorAll("[data-step-content] button, [data-step-content] input, [data-step-content] textarea, [data-step-content] select, [data-step-progress] button")
+    .forEach((node) => {
+      node.disabled = isBusy || node.hasAttribute("data-disabled-route");
+    });
+}
+
+async function cacheUploadedFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) {
+    state.workspace.uploadedFiles = [];
+    persistState();
+    renderApp();
+    renderStatus("Cleared staged uploaded files.");
+    return;
+  }
+
+  const cachedFiles = [];
+  setAnalysisBusy(true);
+  try {
+    for (const [index, file] of files.entries()) {
+      renderStatus(`Loading uploaded file ${index + 1} of ${files.length}: ${file.name}`);
+      cachedFiles.push({
+        name: file.name,
+        text: await file.text(),
+      });
+    }
+    state.workspace.uploadedFiles = cachedFiles;
+    persistState();
+    renderApp();
+    renderStatus(`Staged ${pluralize(cachedFiles.length, "uploaded file")} for analysis.`, "success");
+  } finally {
+    setAnalysisBusy(false);
+  }
+}
+
+async function loadDocumentsFromStoredFiles(storedFiles, onProgress = () => {}) {
+  const documents = [];
+  const issues = [];
+
+  for (const [index, file] of storedFiles.entries()) {
+    onProgress({ current: index + 1, total: storedFiles.length, label: file.name });
+    const text = file.text || "";
+    if (file.name.toLowerCase().endsWith(".csv")) {
+      const csvDocuments = parseCsv(text, file.name);
+      if (!csvDocuments.length) {
+        issues.push(`${file.name}: could not infer a content column in the CSV`);
+        continue;
+      }
+      documents.push(...csvDocuments);
+      continue;
+    }
+
+    const trimmed = text.trim();
+    if (!trimmed) {
+      issues.push(`${file.name}: file was empty`);
+      continue;
+    }
+    documents.push({
+      id: `${file.name}-file`,
+      title: file.name.replace(/\.[^.]+$/, ""),
+      source: `file://${file.name}`,
+      text: trimmed,
+    });
+  }
+
+  return { documents, issues };
+}
+
+async function loadDocumentsFromUrls(rawUrls, onProgress = () => {}) {
+  const urls = rawUrls
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const documents = [];
+  const issues = [];
+
+  for (const [index, originalUrl] of urls.entries()) {
+    onProgress({ current: index + 1, total: urls.length, label: originalUrl });
+    const url = normalizeGoogleExportUrl(originalUrl);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        issues.push(`${originalUrl}: request failed with status ${response.status}`);
+        continue;
+      }
+
+      const text = await response.text();
+      if (isGoogleAuthPage(text)) {
+        issues.push(`${originalUrl}: Google auth is required, so use a public export or upload a file instead`);
+        continue;
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/csv") || url.toLowerCase().includes("format=csv") || url.endsWith(".csv")) {
+        const csvDocuments = parseCsv(text, originalUrl);
+        if (!csvDocuments.length) {
+          issues.push(`${originalUrl}: CSV loaded but no supported content column was found`);
+          continue;
+        }
+        documents.push(...csvDocuments);
+        continue;
+      }
+
+      const extractedText = contentType.includes("text/html") ? extractTextFromHtml(text) : text.trim();
+      if (!extractedText) {
+        issues.push(`${originalUrl}: no readable text was extracted`);
+        continue;
+      }
+
+      documents.push({
+        id: `${originalUrl}-url`,
+        title: deriveTitleFromUrl(originalUrl),
+        source: originalUrl,
+        text: extractedText,
+      });
+    } catch (error) {
+      issues.push(`${originalUrl}: ${error.message}. Public URLs may still fail in-browser because of CORS`);
+    }
+  }
+
+  return { documents, issues };
+}
+
+function loadManualDocuments(entries = state.workspace.manualEntries) {
+  return normalizeManualEntries(entries)
+    .map((entry, index) => ({
+      id: `manual-${index + 1}`,
+      title: entry.title.trim() || `Manual Document ${index + 1}`,
+      source: `manual://document-${index + 1}`,
+      text: entry.text.trim(),
+    }))
+    .filter((document) => document.text);
 }
 
 function buildSummary(result) {
@@ -927,7 +1155,7 @@ function buildSummary(result) {
 
 function buildLevelMarkup(documents) {
   if (!documents.length) {
-    return `<article class="result-card"><p>No documents match the current search and filter.</p></article>`;
+    return `<article class="result-card"><p>No documents match the current view.</p></article>`;
   }
 
   return `
@@ -1010,7 +1238,7 @@ function buildGroupMarkup(result, groups) {
 
 function buildPairMarkup(result, edges) {
   if (!edges.length) {
-    return `<article class="result-card"><p>No document pairs cleared the threshold.</p></article>`;
+    return `<article class="result-card"><p>No document pairs cleared the current threshold.</p></article>`;
   }
 
   return `
@@ -1121,22 +1349,6 @@ function buildFilterButton(value, label, activeFilter) {
   return `<button class="toggle-btn ${activeClass}" type="button" data-view-filter="${value}">${label}</button>`;
 }
 
-function buildShortcutCard(card, activeFilter) {
-  const activeClass = activeFilter === card.filter ? "active" : "";
-  return `
-    <button
-      class="panel snapshot-kpi-card snapshot-kpi-card--shortcut ${activeClass}"
-      type="button"
-      data-kpi-filter="${card.filter}"
-      data-kpi-target="${card.target}"
-    >
-      <span class="snapshot-kpi-label">${card.label}</span>
-      <span class="snapshot-kpi-value ${card.tone}">${card.value}</span>
-      <span class="snapshot-kpi-helper">${card.helper}</span>
-    </button>
-  `;
-}
-
 function groupHasReviewFlags(group) {
   return (
     group.checks.documentLevelConsistency === "mixed-level" ||
@@ -1166,12 +1378,93 @@ function buildDocumentViewModel(result) {
           ? "Canonical candidate"
           : "Grouped document"
         : "Ungrouped",
-      needsReview: group ? needsReview || document.documentLevel.levelFit !== "aligned" : document.documentLevel.levelFit !== "aligned",
+      needsReview: group
+        ? needsReview || document.documentLevel.levelFit !== "aligned"
+        : document.documentLevel.levelFit !== "aligned",
       canonicalTitle: group
         ? result.documents.find((candidate) => candidate.id === group.recommendedPrimaryId)?.title || ""
         : "",
     };
   });
+}
+
+function matchesSearch(haystacks, query) {
+  if (!query) {
+    return true;
+  }
+  return haystacks.some((value) => value.toLowerCase().includes(query));
+}
+
+function filterAnalysisView(result, issues, rawQuery, filter) {
+  const query = rawQuery.trim().toLowerCase();
+  const documents = buildDocumentViewModel(result);
+  const visibleDocumentMap = new Map(documents.map((document) => [document.id, document]));
+
+  const filteredGroups = result.groups.filter((group) => {
+    const primary = result.documents.find((document) => document.id === group.recommendedPrimaryId);
+    const groupReview = groupHasReviewFlags(group);
+    const memberDocuments = group.documentIds.map((id) => visibleDocumentMap.get(id)).filter(Boolean);
+    const searchMatch = matchesSearch(
+      [
+        primary?.title || "",
+        group.recommendation,
+        ...memberDocuments.flatMap((document) => [document.title, document.source]),
+      ],
+      query
+    );
+    if (!searchMatch) {
+      return false;
+    }
+    if (filter === "review") {
+      return groupReview;
+    }
+    if (filter === "level") {
+      return group.checks.documentLevelConsistency === "mixed-level" || group.checks.documentLevelFit === "review-needed";
+    }
+    if (filter === "ready") {
+      return !groupReview;
+    }
+    if (filter === "orphan") {
+      return false;
+    }
+    return true;
+  });
+
+  const filteredDocuments = documents.filter((document) => {
+    const searchMatch = matchesSearch(
+      [document.title, document.source, document.groupLabel, document.canonicalTitle],
+      query
+    );
+    if (!searchMatch) {
+      return false;
+    }
+    if (filter === "review") {
+      return document.needsReview;
+    }
+    if (filter === "level") {
+      return document.documentLevel.levelFit !== "aligned";
+    }
+    if (filter === "ready") {
+      return document.groupLabel !== "Ungrouped" && !document.needsReview;
+    }
+    if (filter === "orphan") {
+      return document.groupLabel === "Ungrouped";
+    }
+    return true;
+  });
+
+  const filteredDocumentIds = new Set(filteredDocuments.map((document) => document.id));
+  const filteredEdges = result.edges.filter(
+    (edge) => filteredDocumentIds.has(edge.leftId) && filteredDocumentIds.has(edge.rightId)
+  );
+  const filteredIssues = issues.filter((issue) => matchesSearch([issue], query));
+
+  return {
+    groups: filteredGroups,
+    documents: filteredDocuments,
+    edges: filteredEdges,
+    issues: filteredIssues,
+  };
 }
 
 export function buildExportPayload(result, issues, rawQuery, filter, threshold = 0.45) {
@@ -1336,206 +1629,6 @@ function downloadTextFile(filename, content, mimeType) {
   URL.revokeObjectURL(objectUrl);
 }
 
-function matchesSearch(haystacks, query) {
-  if (!query) {
-    return true;
-  }
-  return haystacks.some((value) => value.toLowerCase().includes(query));
-}
-
-function filterAnalysisView(result, issues, rawQuery, filter) {
-  const query = rawQuery.trim().toLowerCase();
-  const documents = buildDocumentViewModel(result);
-  const visibleDocumentMap = new Map(documents.map((document) => [document.id, document]));
-
-  const filteredGroups = result.groups.filter((group) => {
-    const primary = result.documents.find((document) => document.id === group.recommendedPrimaryId);
-    const groupReview = groupHasReviewFlags(group);
-    const memberDocuments = group.documentIds.map((id) => visibleDocumentMap.get(id)).filter(Boolean);
-    const searchMatch = matchesSearch(
-      [
-        primary?.title || "",
-        group.recommendation,
-        ...memberDocuments.flatMap((document) => [document.title, document.source]),
-      ],
-      query
-    );
-    if (!searchMatch) {
-      return false;
-    }
-    if (filter === "review") {
-      return groupReview;
-    }
-    if (filter === "level") {
-      return group.checks.documentLevelConsistency === "mixed-level" || group.checks.documentLevelFit === "review-needed";
-    }
-    if (filter === "ready") {
-      return !groupReview;
-    }
-    if (filter === "orphan") {
-      return false;
-    }
-    return true;
-  });
-
-  const filteredDocuments = documents.filter((document) => {
-    const searchMatch = matchesSearch(
-      [document.title, document.source, document.groupLabel, document.canonicalTitle],
-      query
-    );
-    if (!searchMatch) {
-      return false;
-    }
-    if (filter === "review") {
-      return document.needsReview;
-    }
-    if (filter === "level") {
-      return document.documentLevel.levelFit !== "aligned";
-    }
-    if (filter === "ready") {
-      return document.groupLabel !== "Ungrouped" && !document.needsReview;
-    }
-    if (filter === "orphan") {
-      return document.groupLabel === "Ungrouped";
-    }
-    return true;
-  });
-
-  const filteredDocumentIds = new Set(filteredDocuments.map((document) => document.id));
-  const filteredEdges = result.edges.filter(
-    (edge) => filteredDocumentIds.has(edge.leftId) && filteredDocumentIds.has(edge.rightId)
-  );
-  const filteredIssues = issues.filter((issue) => matchesSearch([issue], query));
-
-  return {
-    groups: filteredGroups,
-    documents: filteredDocuments,
-    edges: filteredEdges,
-    issues: filteredIssues,
-  };
-}
-
-function wireCollapsibles(scope) {
-  scope.querySelectorAll("[data-toggle]").forEach((trigger) => {
-    trigger.addEventListener("click", () => {
-      const id = trigger.getAttribute("data-toggle");
-      const section = scope.querySelector(`#${id}`);
-      if (WORKFLOW_SEQUENCE.includes(id)) {
-        setCurrentWorkflowStep(id);
-        return;
-      }
-      section?.classList.toggle("collapsed");
-    });
-  });
-}
-
-function wireResultControls(scope) {
-  const searchInput = scope.querySelector("#analysisSearch");
-  if (searchInput) {
-    searchInput.addEventListener("input", (event) => {
-      state.analysisView.query = event.target.value;
-      const caret = event.target.selectionStart ?? state.analysisView.query.length;
-      renderAnalysisView();
-      requestAnimationFrame(() => {
-        const nextInput = document.querySelector("#analysisSearch");
-        if (!nextInput) {
-          return;
-        }
-        nextInput.focus();
-        nextInput.setSelectionRange(caret, caret);
-      });
-    });
-  }
-
-  scope.querySelectorAll("[data-view-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.analysisView.filter = button.getAttribute("data-view-filter");
-      renderAnalysisView();
-    });
-  });
-
-  scope.querySelectorAll("[data-kpi-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const nextFilter = button.getAttribute("data-kpi-filter");
-      const targetId = button.getAttribute("data-kpi-target");
-      state.analysisView.query = "";
-      state.analysisView.filter = nextFilter;
-      renderAnalysisView();
-      requestAnimationFrame(() => {
-        revealWorkflowSection(targetId);
-      });
-    });
-  });
-
-  scope.querySelectorAll("[data-doc-type-select]").forEach((select) => {
-    select.addEventListener("change", (event) => {
-      const documentId = event.target.getAttribute("data-document-id");
-      const nextType = event.target.value;
-      const sectionId = event.target.closest(".collapsible")?.id || "levelSection";
-      if (nextType) {
-        state.analysisView.levelOverrides[documentId] = nextType;
-      } else {
-        delete state.analysisView.levelOverrides[documentId];
-      }
-      rerunAnalysisWithOverrides();
-      requestAnimationFrame(() => {
-        revealWorkflowSection(sectionId);
-        focusDocumentTypeSelect(documentId);
-      });
-    });
-  });
-
-  scope.querySelectorAll("[data-export-format]").forEach((button) => {
-    button.addEventListener("click", () => {
-      exportCurrentView(button.getAttribute("data-export-format"));
-    });
-  });
-}
-
-function revealWorkflowSection(targetId) {
-  if (!WORKFLOW_SEQUENCE.includes(targetId)) {
-    const section = document.querySelector(`#${targetId}`);
-    if (!section) {
-      return;
-    }
-    section.classList.remove("collapsed");
-    section.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-  setCurrentWorkflowStep(targetId);
-  requestAnimationFrame(() => {
-    document.querySelector(`#${targetId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-}
-
-function setCurrentWorkflowStep(stepId) {
-  if (!WORKFLOW_SEQUENCE.includes(stepId)) {
-    return;
-  }
-  state.analysisView.currentWorkflowStep = stepId;
-  renderAnalysisView();
-}
-
-function focusDocumentTypeSelect(documentId) {
-  const select = [...document.querySelectorAll("[data-doc-type-select]")].find(
-    (candidate) => candidate.getAttribute("data-document-id") === documentId
-  );
-  select?.focus();
-}
-
-function rerunAnalysisWithOverrides() {
-  if (!state.analysisView.documents.length) {
-    return;
-  }
-  const nextResult = analyzeDocuments(
-    state.analysisView.documents,
-    state.analysisView.threshold,
-    state.analysisView.levelOverrides
-  );
-  state.analysisView.result = nextResult;
-  renderAnalysisView();
-}
-
 function exportCurrentView(format) {
   if (!state.analysisView.result) {
     return;
@@ -1569,21 +1662,59 @@ function exportCurrentView(format) {
   renderStatus("Exported Markdown summary for the current filtered view.", "success");
 }
 
+function rerunAnalysisWithOverrides() {
+  if (!state.analysisView.documents.length) {
+    return;
+  }
+  state.analysisView.result = analyzeDocuments(
+    state.analysisView.documents,
+    state.analysisView.threshold,
+    state.analysisView.levelOverrides
+  );
+  persistState();
+  renderApp();
+}
+
+function resetWorkspace() {
+  state.route = "sources";
+  state.includeSampleData = false;
+  state.activeSourceTab = "demo";
+  state.workspace.urlsText = "";
+  state.workspace.uploadedFiles = [];
+  state.workspace.manualEntries = cloneManualEntries(DEFAULT_MANUAL_ENTRIES);
+  state.analysisView.query = "";
+  state.analysisView.filter = "all";
+  state.analysisView.documents = [];
+  state.analysisView.threshold = 0.45;
+  state.analysisView.levelOverrides = {};
+  state.analysisView.usedSampleData = false;
+  state.analysisView.result = null;
+  state.analysisView.issues = [];
+  persistState();
+  goToRoute("sources", { replace: true });
+  renderStatus("Workspace reset. Add demo data or your own documents to begin again.");
+}
+
+function loadDemoSetup() {
+  state.includeSampleData = true;
+  state.activeSourceTab = "demo";
+  state.workspace.urlsText = SAMPLE_URLS.join("\n");
+  persistState();
+  renderApp();
+  renderStatus(
+    "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
+  );
+}
+
 async function runAnalysis() {
-  const threshold = Number(document.querySelector("#threshold").value || "0.45");
-  const urlsValue = document.querySelector("#urls").value;
-  const fileInput = document.querySelector("#files");
   const manualDocuments = loadManualDocuments();
   const sampleDocuments = state.includeSampleData ? SAMPLE_DOCUMENTS : [];
-  const urlCount = urlsValue
-    .split("\n")
-    .map((value) => value.trim())
-    .filter(Boolean).length;
+  const urlCount = countUrlEntries();
   const progress = {
     phase: "collect",
     sampleCount: sampleDocuments.length,
     manualCount: manualDocuments.length,
-    fileCount: fileInput.files.length,
+    fileCount: state.workspace.uploadedFiles.length,
     urlCount,
     filesProcessed: 0,
     urlsProcessed: 0,
@@ -1600,7 +1731,7 @@ async function runAnalysis() {
 
     progress.phase = "files";
     renderProgressStatus(progress);
-    const fileResult = await loadDocumentsFromFiles(fileInput.files, ({ current, label }) => {
+    const fileResult = await loadDocumentsFromStoredFiles(state.workspace.uploadedFiles, ({ current, label }) => {
       progress.filesProcessed = current - 1;
       progress.currentFileName = label;
       renderProgressStatus(progress);
@@ -1611,7 +1742,7 @@ async function runAnalysis() {
 
     progress.phase = "urls";
     renderProgressStatus(progress);
-    const urlResult = await loadDocumentsFromUrls(urlsValue, ({ current, label }) => {
+    const urlResult = await loadDocumentsFromUrls(state.workspace.urlsText, ({ current, label }) => {
       progress.urlsProcessed = current - 1;
       progress.currentUrlLabel = label;
       renderProgressStatus(progress);
@@ -1631,10 +1762,9 @@ async function runAnalysis() {
 
     if (documents.length < 2) {
       renderStatus(
-        "Add at least two documents. The quickest path is the built-in demo library or a small file upload set.",
+        "Add at least two documents. The quickest path is the built-in demo library or a small staged file set.",
         "warning"
       );
-      renderEmptyResults();
       return;
     }
 
@@ -1643,22 +1773,26 @@ async function runAnalysis() {
     renderProgressStatus(progress);
 
     state.analysisView.documents = documents;
-    state.analysisView.threshold = threshold;
-    const validDocumentIds = new Set(documents.map((document) => String(document.id)));
     state.analysisView.levelOverrides = Object.fromEntries(
-      Object.entries(state.analysisView.levelOverrides).filter(([documentId]) => validDocumentIds.has(documentId))
+      Object.entries(state.analysisView.levelOverrides).filter(([documentId]) =>
+        documents.some((document) => String(document.id) === documentId)
+      )
     );
-
-    const result = analyzeDocuments(documents, threshold, state.analysisView.levelOverrides);
+    state.analysisView.result = analyzeDocuments(
+      documents,
+      state.analysisView.threshold,
+      state.analysisView.levelOverrides
+    );
     state.analysisView.query = "";
     state.analysisView.filter = "all";
-    state.analysisView.currentWorkflowStep = "levelSection";
     state.analysisView.usedSampleData = state.includeSampleData;
-    renderResults(result, issues);
+    state.analysisView.issues = issues;
+    persistState();
     renderStatus(
-      `Analyzed ${result.documents.length} documents with a ${threshold.toFixed(2)} similarity threshold.`,
+      `Analyzed ${state.analysisView.result.documents.length} documents with a ${state.analysisView.threshold.toFixed(2)} similarity threshold.`,
       "success"
     );
+    goToRoute("level-review", { replace: true });
   } catch (error) {
     renderStatus(`Analysis could not finish: ${error.message}`, "warning");
   } finally {
@@ -1666,74 +1800,233 @@ async function runAnalysis() {
   }
 }
 
-function wireDemoControls() {
-  const toggle = document.querySelector("#include-sample");
-  const loadUrlsButton = document.querySelector("[data-load-sample-urls]");
-  const runDemoButton = document.querySelector("[data-run-demo]");
+function goToRoute(routeId, { replace = false } = {}) {
+  const nextRouteId = ensureAccessibleRoute(routeId);
+  const nextHash = getRouteHash(nextRouteId);
+  if (typeof window === "undefined") {
+    state.route = nextRouteId;
+    persistState();
+    renderApp();
+    return;
+  }
 
-  toggle.addEventListener("change", () => {
-    state.includeSampleData = toggle.checked;
-    updateSourceSummary();
-    renderDemoBanner();
-    renderReadinessCard();
-  });
+  if (replace) {
+    history.replaceState(null, "", nextHash);
+    handleRouteChange();
+    return;
+  }
 
-  loadUrlsButton.addEventListener("click", () => {
-    loadDemoSetup();
-  });
-
-  runDemoButton.addEventListener("click", async () => {
-    loadDemoSetup();
-    await runAnalysis();
-  });
+  if (window.location.hash !== nextHash) {
+    window.location.hash = nextHash;
+  } else {
+    handleRouteChange();
+  }
 }
 
-function wireForm() {
-  document.querySelector("[data-analyze]").addEventListener("click", async (event) => {
-    event.preventDefault();
-    await runAnalysis();
-  });
-
-  document.querySelector("[data-reset-workspace]").addEventListener("click", () => {
-    resetWorkspace();
-  });
+function handleRouteChange() {
+  state.route = ensureAccessibleRoute(getRouteIdFromHash(window.location.hash || "#/sources"));
+  const canonicalHash = getRouteHash(state.route);
+  if (window.location.hash !== canonicalHash) {
+    history.replaceState(null, "", canonicalHash);
+  }
+  persistState();
+  renderApp();
 }
 
-function wireSourceTabs() {
-  document.querySelectorAll("[data-source-tab]").forEach((button) => {
+function syncThresholdFromSlider(value) {
+  const next = Number(value || state.analysisView.threshold);
+  state.analysisView.threshold = Number(next.toFixed(2));
+  persistState();
+  renderApp();
+}
+
+function syncThresholdFromInput(value) {
+  const numeric = Number(value || state.analysisView.threshold);
+  const clamped = Math.min(0.9, Math.max(0.2, numeric));
+  state.analysisView.threshold = Number(clamped.toFixed(2));
+  persistState();
+  renderApp();
+}
+
+function wireStepEvents(scope) {
+  scope.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {
-      setActiveSourceTab(button.getAttribute("data-source-tab"));
+      goToRoute(button.getAttribute("data-route"));
     });
   });
 
-  document.querySelector("#urls").addEventListener("input", () => {
-    updateSourceSummary();
-    renderReadinessCard();
+  scope.querySelectorAll("[data-source-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeSourceTab = button.getAttribute("data-source-tab");
+      persistState();
+      renderApp();
+    });
   });
 
-  document.querySelector("#files").addEventListener("change", () => {
-    updateSourceSummary();
-    renderReadinessCard();
+  const sampleToggle = scope.querySelector("#include-sample");
+  if (sampleToggle) {
+    sampleToggle.addEventListener("change", () => {
+      state.includeSampleData = sampleToggle.checked;
+      persistState();
+      renderApp();
+    });
+  }
+
+  const urlsInput = scope.querySelector("[data-urls-input]");
+  if (urlsInput) {
+    urlsInput.addEventListener("input", () => {
+      state.workspace.urlsText = urlsInput.value;
+      persistState();
+      refreshSourcesStepFragments();
+    });
+  }
+
+  const fileInput = scope.querySelector("[data-source-files]");
+  if (fileInput) {
+    fileInput.addEventListener("change", async () => {
+      await cacheUploadedFiles(fileInput.files);
+    });
+  }
+
+  const clearFilesButton = scope.querySelector("[data-clear-files]");
+  if (clearFilesButton) {
+    clearFilesButton.addEventListener("click", () => {
+      state.workspace.uploadedFiles = [];
+      persistState();
+      renderApp();
+      renderStatus("Cleared staged uploaded files.");
+    });
+  }
+
+  scope.querySelectorAll("[data-manual-title]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const index = Number(input.getAttribute("data-manual-index"));
+      state.workspace.manualEntries[index].title = input.value;
+      persistState();
+    });
   });
 
-  document.querySelector("[data-manual-documents]").addEventListener("input", () => {
-    updateSourceSummary();
-    renderReadinessCard();
+  scope.querySelectorAll("[data-manual-text]").forEach((textarea) => {
+    textarea.addEventListener("input", () => {
+      const index = Number(textarea.getAttribute("data-manual-index"));
+      state.workspace.manualEntries[index].text = textarea.value;
+      persistState();
+      refreshSourcesStepFragments();
+    });
+  });
+
+  scope.querySelectorAll("[data-remove-manual]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.getAttribute("data-manual-index"));
+      state.workspace.manualEntries.splice(index, 1);
+      state.workspace.manualEntries = normalizeManualEntries(state.workspace.manualEntries);
+      persistState();
+      renderApp();
+    });
+  });
+
+  const addManualButton = scope.querySelector("[data-add-manual]");
+  if (addManualButton) {
+    addManualButton.addEventListener("click", () => {
+      state.workspace.manualEntries.push({ title: "", text: "" });
+      persistState();
+      renderApp();
+    });
+  }
+
+  const thresholdSlider = scope.querySelector("[data-threshold-slider]");
+  if (thresholdSlider) {
+    thresholdSlider.addEventListener("input", () => {
+      syncThresholdFromSlider(thresholdSlider.value);
+    });
+  }
+
+  const thresholdInput = scope.querySelector("[data-threshold-input]");
+  if (thresholdInput) {
+    thresholdInput.addEventListener("input", () => {
+      syncThresholdFromInput(thresholdInput.value);
+    });
+  }
+
+  scope.querySelectorAll("[data-load-demo]").forEach((button) => {
+    button.addEventListener("click", () => {
+      loadDemoSetup();
+    });
+  });
+
+  scope.querySelectorAll("[data-run-demo]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      loadDemoSetup();
+      await runAnalysis();
+    });
+  });
+
+  scope.querySelectorAll("[data-analyze]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await runAnalysis();
+    });
+  });
+
+  scope.querySelectorAll("[data-reset-workspace]").forEach((button) => {
+    button.addEventListener("click", () => {
+      resetWorkspace();
+    });
+  });
+
+  scope.querySelectorAll("[data-doc-type-select]").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      const documentId = event.target.getAttribute("data-document-id");
+      const nextType = event.target.value;
+      if (nextType) {
+        state.analysisView.levelOverrides[documentId] = nextType;
+      } else {
+        delete state.analysisView.levelOverrides[documentId];
+      }
+      rerunAnalysisWithOverrides();
+    });
+  });
+
+  const searchInput = scope.querySelector("#analysisSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", (event) => {
+      state.analysisView.query = event.target.value;
+      persistState();
+      renderApp();
+      requestAnimationFrame(() => {
+        const nextInput = document.querySelector("#analysisSearch");
+        if (!nextInput) {
+          return;
+        }
+        const caret = event.target.selectionStart ?? state.analysisView.query.length;
+        nextInput.focus();
+        nextInput.setSelectionRange(caret, caret);
+      });
+    });
+  }
+
+  scope.querySelectorAll("[data-view-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.analysisView.filter = button.getAttribute("data-view-filter");
+      persistState();
+      renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-export-format]").forEach((button) => {
+    button.addEventListener("click", () => {
+      exportCurrentView(button.getAttribute("data-export-format"));
+    });
   });
 }
 
 function initialize() {
-  setupManualDocuments();
-  wireDemoControls();
-  wireForm();
-  wireSourceTabs();
-  setActiveSourceTab(state.activeSourceTab);
-  updateSourceSummary();
-  renderDemoBanner();
-  renderReadinessCard();
+  restoreState();
+  handleRouteChange();
+  window.addEventListener("hashchange", handleRouteChange);
   void loadDeploymentBadge();
-  renderEmptyResults();
-  renderStatus("Ready. Load the demo library, upload files, paste URLs, or add manual documents.");
+  if (!document.querySelector("[data-status]")?.textContent.trim()) {
+    renderStatus("Ready. Start with Step 1 to assemble the document set and run the analysis.");
+  }
 }
 
 if (typeof document !== "undefined") {
