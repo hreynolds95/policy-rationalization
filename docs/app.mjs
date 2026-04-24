@@ -951,11 +951,14 @@ function buildExportStepMarkup() {
 }
 
 function buildStepFooter(routeId) {
+  if (routeId === "sources") {
+    return "";
+  }
+
   const currentIndex = WIZARD_ROUTES.findIndex((route) => route.id === routeId);
   const previousRoute = currentIndex > 0 ? WIZARD_ROUTES[currentIndex - 1] : null;
   const nextRoute = currentIndex < WIZARD_ROUTES.length - 1 ? WIZARD_ROUTES[currentIndex + 1] : null;
-  const canContinue = routeId === "sources" ? getHasAnalysis() : Boolean(nextRoute);
-  const nextDisabled = routeId === "sources" ? !getHasAnalysis() : !nextRoute;
+  const canContinue = Boolean(nextRoute);
 
   return `
     <footer class="wizard-footer">
@@ -965,7 +968,6 @@ function buildStepFooter(routeId) {
       <div class="wizard-footer__meta">${getWizardRoute(routeId).step} of ${WIZARD_ROUTES.length}</div>
       <div>
         ${canContinue && nextRoute ? `<button class="primary-button" type="button" data-route="${nextRoute.id}">Next</button>` : ""}
-        ${routeId === "sources" && !canContinue ? `<button class="primary-button" type="button" disabled>Run analysis to continue</button>` : ""}
       </div>
     </footer>
   `;
