@@ -91,43 +91,18 @@ body {
 }
 
 .hero {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .hero-top {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.hero-brand {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  flex-shrink: 0;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, #eceff3, #cbd1d6);
-  color: #22252a;
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  box-shadow: var(--shadow-sm);
+  align-items: flex-end;
+  gap: 14px;
 }
 
 .hero-title-wrap {
-  flex: 1 1 auto;
+  flex: 1 1 720px;
   min-width: 0;
 }
 
@@ -145,42 +120,28 @@ body {
   line-height: 1.05;
   font-weight: 700;
   letter-spacing: -0.03em;
-  font-size: clamp(2.15rem, 4.8vw, 4.25rem);
+  font-size: clamp(1.9rem, 4vw, 3.15rem);
 }
 
 .subhead {
-  margin: 10px 0 0;
-  font-size: 0.95rem;
+  margin: 8px 0 0;
+  font-size: 0.9rem;
   color: var(--muted);
-  max-width: 74ch;
-  line-height: 1.55;
-}
-
-.hero-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.hero-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--accent-2);
-  font-size: 0.8rem;
+  max-width: 66ch;
+  line-height: 1.45;
 }
 
 .hero-source {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
   margin-left: auto;
+}
+
+.hero-source--inline {
+  padding-bottom: 4px;
 }
 
 .source-label {
@@ -1399,12 +1360,14 @@ button:hover,
 
   .hero-top {
     flex-wrap: wrap;
+    align-items: flex-start;
   }
 
   .hero-source {
     width: 100%;
     align-items: flex-start;
     margin-left: 0;
+    padding-bottom: 0;
   }
 
   .results-stats {
@@ -1424,17 +1387,11 @@ button:hover,
   }
 
   .search-header,
-  .hero-brand,
   .document-row,
   .manual-card__header,
   .result-card__header {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .brand-mark {
-    width: 48px;
-    height: 48px;
   }
 
   .results-stats,
