@@ -277,6 +277,48 @@ body {
   margin-top: 14px;
 }
 
+.help-disclosure {
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.help-disclosure summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  color: var(--accent-2);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.help-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-disclosure__body {
+  padding: 0 12px 12px;
+  color: var(--accent-3);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.help-disclosure__list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.help-disclosure--compact {
+  margin: 10px 0 0;
+}
+
+.help-disclosure--compact .help-disclosure__body {
+  padding-top: 2px;
+}
+
 .toggle-group--full {
   width: 100%;
 }

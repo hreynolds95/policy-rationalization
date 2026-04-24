@@ -22,6 +22,7 @@ const DEFAULT_MANUAL_ENTRIES = [
   { title: "", text: "" },
   { title: "", text: "" },
 ];
+const SOURCE_TABS = ["urls", "files", "manual"];
 const WIZARD_ROUTES = [
   {
     id: "sources",
@@ -63,7 +64,7 @@ const WIZARD_ROUTES = [
 const state = {
   route: "sources",
   includeSampleData: false,
-  activeSourceTab: "demo",
+  activeSourceTab: "urls",
   isBusy: false,
   workspace: {
     urlsText: "",
@@ -117,6 +118,10 @@ function normalizeManualEntries(entries) {
     normalized.push({ title: "", text: "" });
   }
   return normalized;
+}
+
+function normalizeSourceTab(tab) {
+  return SOURCE_TABS.includes(tab) ? tab : "urls";
 }
 
 function countUrlEntries(text = state.workspace.urlsText) {
@@ -196,7 +201,7 @@ function restoreState() {
     const parsed = JSON.parse(raw);
     state.route = ensureAccessibleRoute(parsed.route || "sources");
     state.includeSampleData = Boolean(parsed.includeSampleData);
-    state.activeSourceTab = parsed.activeSourceTab || "demo";
+    state.activeSourceTab = normalizeSourceTab(parsed.activeSourceTab);
     state.workspace.urlsText = parsed.workspace?.urlsText || "";
     state.workspace.uploadedFiles = Array.isArray(parsed.workspace?.uploadedFiles)
       ? parsed.workspace.uploadedFiles.map((file) => ({
@@ -678,6 +683,21 @@ function buildRunChecklistMarkup() {
   `;
 }
 
+function buildSourceHelpMarkup() {
+  return `
+    <details class="help-disclosure">
+      <summary>Need help choosing a source type?</summary>
+      <div class="help-disclosure__body">
+        <ul class="help-disclosure__list">
+          <li><strong>URLs:</strong> best for public Google exports or web pages that can be fetched directly in the browser.</li>
+          <li><strong>Files:</strong> best for exported `.txt`, `.md`, or `.csv` source material when a document is private or blocked.</li>
+          <li><strong>Manual:</strong> best for quick copy/paste review or small excerpts you want to compare immediately.</li>
+        </ul>
+      </div>
+    </details>
+  `;
+}
+
 function buildSourcesStepMarkup() {
   const route = getWizardRoute("sources");
   const hasAnalysis = getHasAnalysis();
@@ -699,35 +719,14 @@ function buildSourcesStepMarkup() {
             <h3>Source intake workspace</h3>
             <p class="section-subtitle">Use one or more source types below. Everything loaded here rolls into the same review session.</p>
           </div>
+          ${buildSourceHelpMarkup()}
           <div class="workspace-switcher">
             <div class="toggle-group toggle-group--full">
-              <button class="toggle-btn ${state.activeSourceTab === "demo" ? "active" : ""}" type="button" data-source-tab="demo">Demo</button>
               <button class="toggle-btn ${state.activeSourceTab === "urls" ? "active" : ""}" type="button" data-source-tab="urls">URLs</button>
               <button class="toggle-btn ${state.activeSourceTab === "files" ? "active" : ""}" type="button" data-source-tab="files">Files</button>
               <button class="toggle-btn ${state.activeSourceTab === "manual" ? "active" : ""}" type="button" data-source-tab="manual">Manual</button>
             </div>
             <div class="source-summary" data-source-summary-live>${buildSourceSummaryMarkup()}</div>
-          </div>
-
-          <div class="source-panel ${state.activeSourceTab === "demo" ? "is-active" : ""}">
-            <p class="eyebrow">Demo path</p>
-            <h3>Walk through the workflow with sample content</h3>
-            <p class="section-subtitle">Use illustrative sample documents and example URLs to show the wizard flow to your team quickly.</p>
-            <div class="flow-card">
-              <strong>Recommended for first-time reviewers</strong>
-              <p>Load the guided demo setup or run the full demo analysis to move straight into Step 2.</p>
-              <div class="control-row">
-                <button class="ghost-button" type="button" data-load-demo>Load demo setup</button>
-                <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
-              </div>
-            </div>
-            <div class="flow-card flow-card--compact">
-              <label class="toggle">
-                <input type="checkbox" data-include-sample ${state.includeSampleData ? "checked" : ""}>
-                Include the built-in demo library during analysis
-              </label>
-              <p class="hint">Keep this on for walkthroughs. Turn it off when you only want to assess real uploaded or pasted documents.</p>
-            </div>
           </div>
 
           <div class="source-panel ${state.activeSourceTab === "urls" ? "is-active" : ""}">
@@ -736,7 +735,6 @@ function buildSourcesStepMarkup() {
             <div class="field">
               <label for="urlsText">One URL per line</label>
               <textarea id="urlsText" data-urls-input placeholder="https://example.com/policy-a&#10;https://docs.google.com/document/d/.../edit">${escapeHtml(state.workspace.urlsText)}</textarea>
-              <p class="hint">Browser fetches are limited by public access and CORS. If a source is private or blocked, upload an export instead.</p>
             </div>
           </div>
 
@@ -746,7 +744,6 @@ function buildSourcesStepMarkup() {
             <div class="field">
               <label for="sourceFiles">Accepted file types</label>
               <input id="sourceFiles" type="file" accept=".txt,.md,.markdown,.csv" multiple data-source-files>
-              <p class="hint">Uploaded files are cached into this review session so they survive step-to-step navigation.</p>
             </div>
             <div class="control-row">
               <button class="ghost-button ghost-button--small" type="button" data-clear-files ${state.workspace.uploadedFiles.length ? "" : "disabled"}>Clear staged files</button>
@@ -778,7 +775,12 @@ function buildSourcesStepMarkup() {
               <input id="thresholdSlider" type="range" min="0.2" max="0.9" step="0.01" value="${state.analysisView.threshold.toFixed(2)}" data-threshold-slider>
               <input id="thresholdInput" type="number" min="0.2" max="0.9" step="0.01" value="${state.analysisView.threshold.toFixed(2)}" data-threshold-input>
             </div>
-            <p class="hint">Lower values broaden clustering. Higher values keep only stronger near-duplicates.</p>
+            <details class="help-disclosure help-disclosure--compact">
+              <summary>Threshold guidance</summary>
+              <div class="help-disclosure__body">
+                Lower values broaden clustering. Higher values keep only stronger near-duplicates.
+              </div>
+            </details>
           </div>
 
           <div data-readiness-live>${buildReadinessCardMarkup()}</div>
@@ -1806,7 +1808,7 @@ function rerunAnalysisWithOverrides() {
 function resetWorkspace() {
   state.route = "sources";
   state.includeSampleData = false;
-  state.activeSourceTab = "demo";
+  state.activeSourceTab = "urls";
   state.workspace.urlsText = "";
   state.workspace.uploadedFiles = [];
   state.workspace.manualEntries = cloneManualEntries(DEFAULT_MANUAL_ENTRIES);
@@ -1825,7 +1827,7 @@ function resetWorkspace() {
 
 function loadDemoSetup() {
   state.includeSampleData = true;
-  state.activeSourceTab = "demo";
+  state.activeSourceTab = "urls";
   state.workspace.urlsText = SAMPLE_URLS.join("\n");
   persistState();
   renderApp();
