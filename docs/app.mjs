@@ -809,7 +809,7 @@ function buildLevelReviewStepMarkup() {
       <section class="panel table-panel">
         <div class="step-card-header">
           <h3>Document level evaluation</h3>
-          <p class="section-subtitle">Review the inferred type, apply overrides where needed, and correct policy-versus-standard-versus-procedure mismatches before consolidation.</p>
+          <p class="section-subtitle">Check inferred type and fix level mismatches.</p>
         </div>
         <div class="results-section">${levelHtml}</div>
       </section>
@@ -827,7 +827,7 @@ function buildGroupsStepMarkup() {
       <section class="panel table-panel">
         <div class="step-card-header">
           <h3>Recommended consolidation groups</h3>
-          <p class="section-subtitle">Work through canonical candidates, confirm blocker flags, and decide whether a cluster is ready for policy-owner review.</p>
+          <p class="section-subtitle">Review canonical candidates and blocker flags.</p>
         </div>
         <div class="results-section">${groupsHtml}</div>
       </section>
@@ -873,7 +873,6 @@ function buildDetailsStepMarkup() {
               ${buildFilterButton("ready", "Cleaner fits", state.analysisView.filter)}
               ${buildFilterButton("orphan", "Ungrouped docs", state.analysisView.filter)}
             </div>
-            <p class="section-subtitle">Filters only affect this detail page and the export page output.</p>
           </div>
         </div>
       </section>
@@ -881,14 +880,14 @@ function buildDetailsStepMarkup() {
         <section class="panel table-panel">
           <div class="step-card-header">
             <h3>Analyzed documents</h3>
-            <p class="section-subtitle">Browse the document set with cluster membership and review posture.</p>
+            <p class="section-subtitle">Cluster membership and review posture.</p>
           </div>
           <div class="results-section">${documentsHtml}</div>
         </section>
         <section class="panel table-panel">
           <div class="step-card-header">
             <h3>Top similarity pairs</h3>
-            <p class="section-subtitle">Use pair-level overlap to spot near-duplicates that may not form a full cluster yet.</p>
+            <p class="section-subtitle">High-overlap pairs that may not form a full cluster yet.</p>
           </div>
           <div class="results-section">${pairsHtml}</div>
         </section>
