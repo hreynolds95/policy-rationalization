@@ -905,43 +905,40 @@ function buildExportStepMarkup() {
     state.analysisView.filter
   );
   const issuesHtml = buildIssuesMarkup(filtered.issues);
+  const viewLabel = state.analysisView.filter === "all" ? "All results" : `${state.analysisView.filter} filter`;
   return `
     <section class="wizard-step-page">
-      ${buildStepHero("export", `
-        <p class="section-subtitle wizard-export-note">Current export view: ${state.analysisView.filter} filter${state.analysisView.query ? ` with search \"${escapeHtml(state.analysisView.query)}\"` : ""}.</p>
-      `)}
-      ${buildAnalysisSummaryMarkup()}
-      <div class="wizard-grid wizard-grid--export">
-        <section class="panel table-panel">
-          <div class="step-card-header">
-            <h3>Export outputs</h3>
-            <p class="section-subtitle">Download the current review view in CSV or Markdown format for sharing and follow-up.</p>
-          </div>
-          <div class="control-row control-row--spaced">
-            <button class="primary-button" type="button" data-export-format="csv">Export CSV</button>
-            <button class="ghost-button" type="button" data-export-format="md">Export Markdown</button>
-          </div>
-          <div class="flow-card flow-card--compact">
-            <strong>What gets exported</strong>
-            <p>The export reflects the current filter, search state, reviewer overrides, and visible issues from this wizard session.</p>
-          </div>
-        </section>
+      ${buildStepHero("export")}
+      <section class="panel table-panel export-finish-card">
+        <div class="step-card-header">
+          <h3>Download current review view</h3>
+          <p class="section-subtitle">Exports include the current view, reviewer overrides, and visible issues from this session.</p>
+        </div>
+        <div class="export-finish-card__meta">
+          <span class="source-chip source-chip--active">${escapeHtml(viewLabel)}</span>
+          ${state.analysisView.query ? `<span class="source-chip source-chip--active">Search: ${escapeHtml(state.analysisView.query)}</span>` : ""}
+          <span class="doc-badge">Docs ${filtered.documents.length}</span>
+          <span class="doc-badge doc-badge--warn">Issues ${filtered.issues.length}</span>
+        </div>
+        <div class="control-row">
+          <button class="primary-button" type="button" data-export-format="csv">Export CSV</button>
+          <button class="ghost-button" type="button" data-export-format="md">Export Markdown</button>
+        </div>
+      </section>
 
-        <section class="panel table-panel">
-          <div class="step-card-header">
-            <h3>Import issues and blockers</h3>
-            <p class="section-subtitle">Capture any fetch, auth, parsing, or empty-content warnings before sharing the analysis.</p>
-          </div>
-          <div class="results-section">${issuesHtml}</div>
-        </section>
-      </div>
-      ${buildStepFooter("export")}
+      <section class="panel table-panel">
+        <div class="step-card-header">
+          <h3>Issues and blockers</h3>
+          <p class="section-subtitle">Warnings to review before sharing the output.</p>
+        </div>
+        <div class="results-section">${issuesHtml}</div>
+      </section>
     </section>
   `;
 }
 
 function buildStepFooter(routeId) {
-  if (routeId === "sources") {
+  if (routeId === "sources" || routeId === "export") {
     return "";
   }
 

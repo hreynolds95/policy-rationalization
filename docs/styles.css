@@ -1586,8 +1586,15 @@ button:hover,
   letter-spacing: 0.02em;
 }
 
-.wizard-export-note {
-  margin-top: 4px;
+.export-finish-card {
+  display: grid;
+  gap: 12px;
+}
+
+.export-finish-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .staged-file-list {
