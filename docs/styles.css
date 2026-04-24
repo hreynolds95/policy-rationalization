@@ -790,44 +790,56 @@ button:hover,
   display: block;
 }
 
-.readiness-card {
+.run-panel {
   border: 1px solid var(--bg-tertiary);
   border-radius: var(--radius-md);
   padding: 12px;
   background: var(--bg-secondary);
+  display: grid;
+  gap: 12px;
 }
 
-.readiness-card--ready {
+.run-panel--ready {
   border-color: rgba(163, 215, 149, 0.32);
 }
 
-.readiness-card--warning {
+.run-panel--warning {
   border-color: rgba(255, 217, 102, 0.32);
 }
 
-.readiness-card__header {
+.run-panel__header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
 }
 
-.readiness-card__header strong {
-  font-size: 0.92rem;
+.run-panel__header strong {
+  display: block;
+  font-size: 0.98rem;
 }
 
-.readiness-card p {
-  margin: 8px 0 0;
+.run-panel__header .eyebrow {
+  margin-bottom: 5px;
+}
+
+.run-panel__detail {
+  margin: 0;
+  color: var(--accent-2);
   line-height: 1.5;
 }
 
-.readiness-list {
-  margin: 12px 0 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 6px;
-  color: var(--accent-2);
-  font-size: 0.82rem;
+.run-panel__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.run-panel__controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .results-hero {
@@ -1657,77 +1669,6 @@ button:hover,
 
 .control-row--wrap {
   flex-wrap: wrap;
-}
-
-.run-checklist {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.run-checklist__item {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--line);
-}
-
-.run-checklist__item--complete {
-  border-color: rgba(163, 215, 149, 0.24);
-}
-
-.run-checklist__item--current {
-  border-color: rgba(124, 172, 255, 0.24);
-}
-
-.run-checklist__item--upcoming {
-  opacity: 0.72;
-}
-
-.run-checklist__number {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--accent-2);
-  font-size: 0.76rem;
-  font-weight: 800;
-}
-
-.run-checklist__item--complete .run-checklist__number {
-  color: var(--success);
-  border-color: rgba(163, 215, 149, 0.28);
-  background: rgba(163, 215, 149, 0.12);
-}
-
-.run-checklist__item--current .run-checklist__number {
-  color: var(--info);
-  border-color: rgba(124, 172, 255, 0.28);
-  background: rgba(124, 172, 255, 0.12);
-}
-
-.run-checklist__item strong,
-.run-checklist__item span {
-  display: block;
-}
-
-.run-checklist__item strong {
-  font-size: 0.88rem;
-}
-
-.run-checklist__item span {
-  margin-top: 4px;
-  font-size: 0.8rem;
-  color: var(--accent-3);
-  line-height: 1.45;
 }
 
 .summary-strip {

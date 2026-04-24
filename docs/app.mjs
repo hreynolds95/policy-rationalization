@@ -463,23 +463,30 @@ function computeWorkspaceReadiness() {
   };
 }
 
-function buildReadinessCardMarkup() {
+function buildRunPanelMarkup() {
   const readiness = computeWorkspaceReadiness();
   return `
-    <div class="readiness-card readiness-card--${readiness.tone}">
-      <div class="readiness-card__header">
-        <strong>${readiness.headline}</strong>
+    <div class="run-panel run-panel--${readiness.tone}">
+      <div class="run-panel__header">
+        <div>
+          <p class="eyebrow">Ready check</p>
+          <strong>${readiness.headline}</strong>
+        </div>
         <span class="doc-badge ${readiness.tone === "ready" ? "doc-badge--ok" : "doc-badge--warn"}">
           ${readiness.estimatedDocuments} estimated doc${readiness.estimatedDocuments === 1 ? "" : "s"}
         </span>
       </div>
-      <p>${readiness.detail}</p>
-      <ul class="readiness-list">
-        <li>Demo library: ${readiness.sampleEnabled ? "included" : "off"}</li>
-        <li>URLs loaded: ${readiness.urlCount}</li>
-        <li>Staged files: ${readiness.fileCount}</li>
-        <li>Manual docs with text: ${readiness.manualCount}</li>
-      </ul>
+      <p class="run-panel__detail">${readiness.detail}</p>
+      <div class="run-panel__metrics">
+        <span class="source-chip ${readiness.sampleEnabled ? "source-chip--active" : ""}">Demo ${readiness.sampleEnabled ? "on" : "off"}</span>
+        <span class="source-chip ${readiness.urlCount ? "source-chip--active" : ""}">${readiness.urlCount} URL${readiness.urlCount === 1 ? "" : "s"}</span>
+        <span class="source-chip ${readiness.fileCount ? "source-chip--active" : ""}">${readiness.fileCount} file${readiness.fileCount === 1 ? "" : "s"}</span>
+        <span class="source-chip ${readiness.manualCount ? "source-chip--active" : ""}">${readiness.manualCount} pasted</span>
+      </div>
+      <div class="run-panel__controls">
+        <button class="primary-button" type="button" data-analyze>${readiness.estimatedDocuments >= 2 ? "Analyze and continue" : "Analyze document set"}</button>
+        <button class="ghost-button" type="button" data-reset-workspace>Reset inputs</button>
+      </div>
     </div>
   `;
 }
@@ -638,51 +645,6 @@ function buildStartPathMarkup() {
   `;
 }
 
-function buildRunChecklistMarkup() {
-  const readiness = computeWorkspaceReadiness();
-  const checklist = [
-    {
-      label: "Choose a starting path",
-      detail: state.includeSampleData || readiness.urlCount || readiness.fileCount || readiness.manualCount
-        ? "A demo or live review source path is in progress."
-        : "Pick the demo walkthrough or start loading real sources.",
-      state: state.includeSampleData || readiness.urlCount || readiness.fileCount || readiness.manualCount ? "complete" : "current",
-    },
-    {
-      label: "Load enough source material",
-      detail: readiness.estimatedDocuments >= 2
-        ? `${readiness.estimatedDocuments} estimated documents are ready for comparison.`
-        : "Add at least two documents so overlap scoring can run.",
-      state: readiness.estimatedDocuments >= 2 ? "complete" : "current",
-    },
-    {
-      label: "Run analysis and unlock Step 2",
-      detail: getHasAnalysis()
-        ? "The review pages are unlocked."
-        : "Run the document set to move into document-level review.",
-      state: getHasAnalysis() ? "complete" : readiness.estimatedDocuments >= 2 ? "current" : "upcoming",
-    },
-  ];
-
-  return `
-    <div class="run-checklist">
-      ${checklist
-        .map(
-          (item, index) => `
-            <div class="run-checklist__item run-checklist__item--${item.state}">
-              <span class="run-checklist__number">${index + 1}</span>
-              <div>
-                <strong>${item.label}</strong>
-                <span>${item.detail}</span>
-              </div>
-            </div>
-          `
-        )
-        .join("")}
-    </div>
-  `;
-}
-
 function buildSourceHelpMarkup() {
   return `
     <details class="help-disclosure">
@@ -701,7 +663,6 @@ function buildSourceHelpMarkup() {
 function buildSourcesStepMarkup() {
   const route = getWizardRoute("sources");
   const hasAnalysis = getHasAnalysis();
-  const readiness = computeWorkspaceReadiness();
   return `
     <section class="wizard-step-page">
       <div class="wizard-step-page__header">
@@ -767,7 +728,7 @@ function buildSourcesStepMarkup() {
             <p class="section-subtitle">Check readiness, tune the threshold, then start the analysis when the source set is ready.</p>
           </div>
 
-          <div data-run-checklist-live>${buildRunChecklistMarkup()}</div>
+          <div data-run-panel-live>${buildRunPanelMarkup()}</div>
 
           <div class="field">
             <label for="thresholdSlider">Similarity threshold</label>
@@ -781,13 +742,6 @@ function buildSourcesStepMarkup() {
                 Lower values broaden clustering. Higher values keep only stronger near-duplicates.
               </div>
             </details>
-          </div>
-
-          <div data-readiness-live>${buildReadinessCardMarkup()}</div>
-
-          <div class="control-row control-row--spaced">
-            <button class="primary-button" type="button" data-analyze>${readiness.estimatedDocuments >= 2 ? "Analyze and continue" : "Analyze document set"}</button>
-            <button class="ghost-button" type="button" data-reset-workspace>Reset inputs</button>
           </div>
 
           ${hasAnalysis ? `
@@ -1120,13 +1074,10 @@ function refreshSourcesStepFragments() {
   if (summaryTarget) {
     summaryTarget.innerHTML = buildSourceSummaryMarkup();
   }
-  const checklistTarget = document.querySelector("[data-run-checklist-live]");
-  if (checklistTarget) {
-    checklistTarget.innerHTML = buildRunChecklistMarkup();
-  }
-  const readinessTarget = document.querySelector("[data-readiness-live]");
-  if (readinessTarget) {
-    readinessTarget.innerHTML = buildReadinessCardMarkup();
+  const runPanelTarget = document.querySelector("[data-run-panel-live]");
+  if (runPanelTarget) {
+    runPanelTarget.innerHTML = buildRunPanelMarkup();
+    wireStepEvents(runPanelTarget);
   }
 }
 
