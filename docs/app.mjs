@@ -763,11 +763,12 @@ function buildSourcesStepMarkup() {
 
 function buildStepHero(routeId, context) {
   const route = getWizardRoute(routeId);
+  const subtitle = routeId === "sources" ? route.subtitle : "";
   return `
     <div class="wizard-step-page__header">
       <p class="eyebrow">${route.step}</p>
       <h2>${route.title}</h2>
-      <p class="section-subtitle">${route.subtitle}</p>
+      ${subtitle ? `<p class="section-subtitle">${subtitle}</p>` : ""}
       ${context || ""}
     </div>
   `;
@@ -783,26 +784,16 @@ function buildAnalysisSummaryMarkup() {
   return `
     ${buildDemoBannerMarkup("results")}
     <div class="panel table-panel summary-strip">
-      <div class="results-hero">
-        <div>
-          <p class="eyebrow">Analysis snapshot</p>
-          <h3>Current review context</h3>
-          <p class="section-subtitle">Strongest canonical candidate: ${strongestCanonical}</p>
-          <p>${summary}</p>
+      <div class="review-context">
+        <div class="review-context__copy">
+          <p class="eyebrow">Review context</p>
+          <p class="review-context__summary">${summary}</p>
         </div>
-        <div class="snapshot-kpis results-stats">
-          <article class="panel snapshot-kpi-card">
-            <span class="snapshot-kpi-label">Documents</span>
-            <span class="snapshot-kpi-value info">${result.documents.length}</span>
-          </article>
-          <article class="panel snapshot-kpi-card">
-            <span class="snapshot-kpi-label">Pairs</span>
-            <span class="snapshot-kpi-value warning">${result.edges.length}</span>
-          </article>
-          <article class="panel snapshot-kpi-card">
-            <span class="snapshot-kpi-label">Groups</span>
-            <span class="snapshot-kpi-value success">${result.groups.length}</span>
-          </article>
+        <div class="review-context__meta">
+          <span class="source-chip source-chip--active">Canonical: ${escapeHtml(strongestCanonical)}</span>
+          <span class="doc-badge">Docs ${result.documents.length}</span>
+          <span class="doc-badge doc-badge--warn">Pairs ${result.edges.length}</span>
+          <span class="doc-badge doc-badge--ok">Groups ${result.groups.length}</span>
         </div>
       </div>
     </div>
