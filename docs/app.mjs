@@ -1001,10 +1001,10 @@ function renderProgressHeader() {
   const routeStates = buildWizardRouteStates();
   target.innerHTML = `
     <div class="wizard-progress-header">
-      <div>
+      <div class="wizard-progress-copy">
         <p class="eyebrow">Guided review flow</p>
-        <h2>One step at a time</h2>
-        <p class="section-subtitle">Move through the process step by step. Only the current page asks for action.</p>
+        <h2>Five-step review</h2>
+        <p class="section-subtitle">Only the current step asks for action.</p>
       </div>
       <nav class="wizard-route-list" aria-label="Wizard progress">
         ${WIZARD_ROUTES.map((route, index) => {

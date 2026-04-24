@@ -1457,18 +1457,23 @@ button:hover,
 
 .wizard-progress-header {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+}
+
+.wizard-progress-copy {
+  display: grid;
+  gap: 2px;
 }
 
 .wizard-progress-header h2 {
-  margin: 0 0 6px;
-  font-size: 1.12rem;
+  margin: 0;
+  font-size: 1rem;
 }
 
 .wizard-route-list {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .wizard-route {
@@ -1476,19 +1481,19 @@ button:hover,
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background: var(--bg-secondary);
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--ink);
   text-align: left;
   transition: border-color 0.18s ease, opacity 0.18s ease, transform 0.18s ease, background 0.18s ease;
 }
 
 .wizard-route:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border-color: rgba(124, 172, 255, 0.28);
+  border-color: rgba(124, 172, 255, 0.22);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .wizard-route:disabled {
@@ -1496,24 +1501,24 @@ button:hover,
 }
 
 .wizard-route__number {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--accent-2);
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 800;
 }
 
 .wizard-route__text {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .wizard-route__text strong,
@@ -1522,42 +1527,43 @@ button:hover,
 }
 
 .wizard-route__text strong {
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   color: var(--ink);
 }
 
 .wizard-route__text span {
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   color: var(--muted);
 }
 
 .wizard-route--complete {
-  border-color: rgba(163, 215, 149, 0.24);
+  border-color: rgba(163, 215, 149, 0.16);
 }
 
 .wizard-route--complete .wizard-route__number {
   color: var(--success);
-  border-color: rgba(163, 215, 149, 0.28);
-  background: rgba(163, 215, 149, 0.12);
+  border-color: rgba(163, 215, 149, 0.22);
+  background: rgba(163, 215, 149, 0.08);
 }
 
 .wizard-route--current {
-  border-color: rgba(124, 172, 255, 0.3);
-  box-shadow: 0 0 0 1px rgba(124, 172, 255, 0.12), var(--shadow-sm);
+  border-color: rgba(124, 172, 255, 0.24);
+  background: rgba(124, 172, 255, 0.05);
+  box-shadow: 0 0 0 1px rgba(124, 172, 255, 0.08);
 }
 
 .wizard-route--current .wizard-route__number {
   color: var(--info);
-  border-color: rgba(124, 172, 255, 0.3);
-  background: rgba(124, 172, 255, 0.12);
+  border-color: rgba(124, 172, 255, 0.24);
+  background: rgba(124, 172, 255, 0.1);
 }
 
 .wizard-route--upcoming {
-  opacity: 0.78;
+  opacity: 0.72;
 }
 
 .wizard-route--locked {
-  opacity: 0.42;
+  opacity: 0.36;
 }
 
 .wizard-step-page {
