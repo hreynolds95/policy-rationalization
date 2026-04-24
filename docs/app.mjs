@@ -396,6 +396,14 @@ function setDeploymentBadge(label, timestamp) {
   }
 }
 
+function setStatusShellVisibility(isVisible) {
+  const shell = document.querySelector("[data-status-shell]");
+  if (!shell) {
+    return;
+  }
+  shell.hidden = !isVisible;
+}
+
 async function loadDeploymentBadge() {
   try {
     const response = await fetch(DEPLOYMENT_API_URL, {
@@ -476,8 +484,15 @@ function renderStatus(message, tone = "neutral") {
   if (!status) {
     return;
   }
+  if (!message) {
+    status.textContent = "";
+    delete status.dataset.tone;
+    setStatusShellVisibility(false);
+    return;
+  }
   status.textContent = message;
   status.dataset.tone = tone;
+  setStatusShellVisibility(true);
 }
 
 function renderProgressStatus(progress) {
@@ -507,6 +522,7 @@ function renderProgressStatus(progress) {
         .join("")}
     </ul>
   `;
+  setStatusShellVisibility(true);
 }
 
 function buildManualCardsMarkup() {
@@ -1030,7 +1046,7 @@ function renderProgressHeader() {
       <div>
         <p class="eyebrow">Guided review flow</p>
         <h2>One step at a time</h2>
-        <p class="section-subtitle">Move through the process page by page so reviewers always know what is done, what is current, and what comes next.</p>
+        <p class="section-subtitle">Move through the process step by step. Only the current page asks for action.</p>
       </div>
       <nav class="wizard-route-list" aria-label="Wizard progress">
         ${WIZARD_ROUTES.map((route, index) => {
@@ -1046,7 +1062,7 @@ function renderProgressHeader() {
               <span class="wizard-route__number">${index + 1}</span>
               <span class="wizard-route__text">
                 <strong>${route.title}</strong>
-                <span>${stateLabel === "locked" ? "Run analysis first" : route.step}</span>
+                <span>${stateLabel === "locked" ? "Locked" : stateLabel === "complete" ? "Done" : stateLabel === "upcoming" ? "Up next" : route.step}</span>
               </span>
             </button>
           `;
@@ -2143,9 +2159,7 @@ function initialize() {
   handleRouteChange();
   window.addEventListener("hashchange", handleRouteChange);
   void loadDeploymentBadge();
-  if (!document.querySelector("[data-status]")?.textContent.trim()) {
-    renderStatus("Ready. Start with Step 1 to assemble the document set and run the analysis.");
-  }
+  renderStatus("");
 }
 
 if (typeof document !== "undefined") {
