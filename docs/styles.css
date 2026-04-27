@@ -830,7 +830,7 @@ button:hover,
 }
 
 .result-card {
-  padding: 14px;
+  padding: 12px;
 }
 
 .result-card__header {
@@ -840,26 +840,47 @@ button:hover,
   align-items: center;
 }
 
+.result-card__header--tight {
+  align-items: flex-start;
+}
+
+.result-card__header--tight h4 {
+  margin: 0;
+}
+
+.result-card__meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.result-card__summary {
+  margin: 10px 0 0;
+  color: var(--accent-2);
+  line-height: 1.5;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: 999px;
   background: rgba(124, 172, 255, 0.14);
   color: var(--info);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .check-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .check {
-  padding: 10px;
+  padding: 9px 10px;
   border-radius: var(--radius-md);
   background: var(--bg);
   border: 1px solid var(--line);
@@ -886,7 +907,7 @@ button:hover,
 .issue-list {
   display: grid;
   gap: 8px;
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -895,7 +916,7 @@ button:hover,
 .document-row,
 .pair-list li,
 .issue-list li {
-  padding: 10px 12px;
+  padding: 9px 11px;
   border-radius: var(--radius-md);
   background: var(--bg);
   border: 1px solid var(--line);
@@ -921,7 +942,7 @@ button:hover,
 
 .document-row__meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -930,7 +951,7 @@ button:hover,
   display: grid;
   gap: 4px;
   min-width: 150px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: var(--radius-md);
   background: var(--bg);
   border: 1px solid var(--line);
@@ -980,11 +1001,11 @@ button:hover,
 .doc-badge {
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   background: rgba(124, 172, 255, 0.14);
   color: var(--info);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1012,7 +1033,11 @@ button:hover,
 
 .pair-list strong {
   color: var(--accent);
-  font-size: 1rem;
+  font-size: 0.94rem;
+}
+
+.pair-score {
+  letter-spacing: 0.01em;
 }
 
 .section-subtitle {

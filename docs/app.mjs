@@ -1267,12 +1267,14 @@ function buildGroupMarkup(result, groups) {
       const primary = result.documents.find((document) => document.id === group.recommendedPrimaryId);
       return `
         <article class="result-card">
-          <div class="result-card__header">
-            <p class="eyebrow">Group ${index + 1}</p>
-            <span class="pill">${group.avgInternalSimilarity.toFixed(4)} avg similarity</span>
+          <div class="result-card__header result-card__header--tight">
+            <div>
+              <h4>${primary.title}</h4>
+              <p class="result-card__meta">Group ${index + 1}</p>
+            </div>
+            <span class="pill">${group.avgInternalSimilarity.toFixed(4)} similarity</span>
           </div>
-          <h4>${primary.title}</h4>
-          <p>${group.recommendation}</p>
+          <p class="result-card__summary">${group.recommendation}</p>
           <div class="check-grid">
             ${Object.entries(group.checks)
               .map(
@@ -1317,12 +1319,12 @@ function buildPairMarkup(result, edges) {
             const left = result.documents.find((document) => document.id === edge.leftId);
             const right = result.documents.find((document) => document.id === edge.rightId);
             return `
-              <li>
-                <span>${left.title}</span>
-                <strong>${edge.score.toFixed(4)}</strong>
-                <span>${right.title}</span>
-              </li>
-            `;
+            <li>
+              <span>${left.title}</span>
+              <strong class="pair-score">${edge.score.toFixed(4)}</strong>
+              <span>${right.title}</span>
+            </li>
+          `;
           })
           .join("")}
       </ul>
