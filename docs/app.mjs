@@ -1019,6 +1019,7 @@ function renderProgressHeader() {
       </nav>
     </div>
   `;
+  wireStepEvents(target);
 }
 
 function renderCurrentStep() {
@@ -1787,6 +1788,20 @@ function scrollToStepContent() {
   });
 }
 
+function scrollToSourceWorkspace() {
+  const target =
+    document.querySelector(".workspace-switcher") ||
+    document.querySelector("#urlsText") ||
+    document.querySelector("[data-step-content]");
+  target?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+  if (target instanceof HTMLElement && target.matches("#urlsText")) {
+    target.focus({ preventScroll: true });
+  }
+}
+
 function loadDemoSetup({ announce = true } = {}) {
   state.includeSampleData = true;
   state.activeSourceTab = "urls";
@@ -1947,6 +1962,14 @@ function wireStepEvents(scope) {
     button.addEventListener("click", () => {
       if (state.route === "sources" && isSourcesWorkspaceEmpty()) {
         loadDemoSetup({ announce: true });
+        requestAnimationFrame(() => {
+          scrollToSourceWorkspace();
+        });
+        return;
+      }
+      if (state.route === "sources") {
+        scrollToSourceWorkspace();
+        return;
       }
       scrollToStepContent();
     });
