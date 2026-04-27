@@ -7,10 +7,13 @@ import {
   parseCsv,
 } from "./analysis.mjs";
 import { runRedlineCompare } from "./redline.mjs";
-import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
+import {
+  DEFAULT_SAMPLE_LIBRARY_KEY,
+  SAMPLE_LIBRARIES,
+} from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:45 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 7:01 PM EDT";
 const GROUP_DECISION_OPTIONS = [
   { value: "accept", label: "Accept" },
   { value: "revise", label: "Revise" },
@@ -70,6 +73,7 @@ const WIZARD_ROUTES = [
 const state = {
   route: "sources",
   includeSampleData: false,
+  sampleLibraryKey: DEFAULT_SAMPLE_LIBRARY_KEY,
   activeSourceTab: "urls",
   isBusy: false,
   ui: {
@@ -88,6 +92,7 @@ const state = {
     levelOverrides: {},
     groupDecisions: {},
     usedSampleData: false,
+    usedSampleLibraryKey: DEFAULT_SAMPLE_LIBRARY_KEY,
     result: null,
     issues: [],
   },
@@ -118,6 +123,14 @@ function pluralize(count, singular, plural = `${singular}s`) {
 
 function getRequirementGroupKey(group) {
   return [...(group?.requirementIds || [])].sort().join("::");
+}
+
+function getActiveSampleLibrary() {
+  return SAMPLE_LIBRARIES[state.sampleLibraryKey] || SAMPLE_LIBRARIES[DEFAULT_SAMPLE_LIBRARY_KEY];
+}
+
+function getLibraryByKey(libraryKey) {
+  return SAMPLE_LIBRARIES[libraryKey] || SAMPLE_LIBRARIES[DEFAULT_SAMPLE_LIBRARY_KEY];
 }
 
 function getGroupDecision(group) {
@@ -202,6 +215,7 @@ function persistState() {
   const payload = {
     route: state.route,
     includeSampleData: state.includeSampleData,
+    sampleLibraryKey: state.sampleLibraryKey,
     activeSourceTab: state.activeSourceTab,
     ui: state.ui,
     workspace: {
@@ -217,6 +231,7 @@ function persistState() {
       levelOverrides: state.analysisView.levelOverrides,
       groupDecisions: state.analysisView.groupDecisions,
       usedSampleData: state.analysisView.usedSampleData,
+      usedSampleLibraryKey: state.analysisView.usedSampleLibraryKey,
       result: state.analysisView.result,
       issues: state.analysisView.issues,
     },
@@ -240,6 +255,7 @@ function restoreState() {
     const parsed = JSON.parse(raw);
     state.route = ensureAccessibleRoute(parsed.route || "sources");
     state.includeSampleData = Boolean(parsed.includeSampleData);
+    state.sampleLibraryKey = SAMPLE_LIBRARIES[parsed.sampleLibraryKey] ? parsed.sampleLibraryKey : DEFAULT_SAMPLE_LIBRARY_KEY;
     state.activeSourceTab = normalizeSourceTab(parsed.activeSourceTab);
     state.ui.isChangeSummaryOpen = Boolean(parsed.ui?.isChangeSummaryOpen);
     state.workspace.urlsText = parsed.workspace?.urlsText || "";
@@ -259,6 +275,9 @@ function restoreState() {
     state.analysisView.levelOverrides = parsed.analysisView?.levelOverrides || {};
     state.analysisView.groupDecisions = parsed.analysisView?.groupDecisions || {};
     state.analysisView.usedSampleData = Boolean(parsed.analysisView?.usedSampleData);
+    state.analysisView.usedSampleLibraryKey = SAMPLE_LIBRARIES[parsed.analysisView?.usedSampleLibraryKey]
+      ? parsed.analysisView.usedSampleLibraryKey
+      : DEFAULT_SAMPLE_LIBRARY_KEY;
     state.analysisView.result = parsed.analysisView?.result || null;
     state.analysisView.issues = Array.isArray(parsed.analysisView?.issues) ? parsed.analysisView.issues : [];
   } catch {
@@ -271,9 +290,10 @@ function buildSourceSummaryMarkup() {
   const urlCount = countUrlEntries();
   const manualCount = countManualEntries();
   const sampleEnabled = state.includeSampleData;
+  const sampleLibrary = getActiveSampleLibrary();
 
   const chips = [
-    `<span class="source-chip ${sampleEnabled ? "source-chip--active" : ""}">Demo library ${sampleEnabled ? "on" : "off"}</span>`,
+    `<span class="source-chip ${sampleEnabled ? "source-chip--active" : ""}">${escapeHtml(sampleLibrary.shortLabel)} ${sampleEnabled ? "on" : "off"}</span>`,
     `<span class="source-chip ${urlCount ? "source-chip--active" : ""}">${urlCount} URL${urlCount === 1 ? "" : "s"}</span>`,
     `<span class="source-chip ${fileCount ? "source-chip--active" : ""}">${fileCount} staged file${fileCount === 1 ? "" : "s"}</span>`,
     `<span class="source-chip ${manualCount ? "source-chip--active" : ""}">${manualCount} pasted doc${manualCount === 1 ? "" : "s"}</span>`,
@@ -282,16 +302,23 @@ function buildSourceSummaryMarkup() {
   return chips.join("");
 }
 
-export function buildDemoBannerContent(sampleCount, context = "workspace") {
+export function buildDemoBannerContent(sampleCount, context = "workspace", libraryKey = state.sampleLibraryKey) {
+  const library = getLibraryByKey(libraryKey);
   const descriptor =
     context === "results"
-      ? "The current analysis includes illustrative demo content."
-      : "Demo mode is active in this workspace.";
+      ? library.isRealContent
+        ? "The current analysis includes real extracted policy content."
+        : "The current analysis includes illustrative demo content."
+      : library.isRealContent
+        ? "A real policy starter set is active in this workspace."
+        : "Demo mode is active in this workspace.";
 
   return {
-    title: "Demo mode",
-    body: `${descriptor} Built-in sample documents and example URLs are intended for walkthroughs and quick feedback, not policy decisions.`,
-    detail: `${pluralize(sampleCount, "sample document")} available in the bundled library.`,
+    title: library.isRealContent ? "Real starter set" : "Demo mode",
+    body: library.isRealContent
+      ? `${descriptor} These examples were extracted from the published policy library and are intended to ground review logic in real compliance language.`
+      : `${descriptor} Built-in sample documents and example URLs are intended for walkthroughs and quick feedback, not policy decisions.`,
+    detail: `${pluralize(sampleCount, "document")} available in the ${library.isRealContent ? "real starter set" : "bundled library"}.`,
   };
 }
 
@@ -302,7 +329,8 @@ function buildDemoBannerMarkup(context = "workspace") {
   if (!state.analysisView.usedSampleData && context === "results") {
     return "";
   }
-  const banner = buildDemoBannerContent(SAMPLE_DOCUMENTS.length, context);
+  const libraryKey = context === "results" ? state.analysisView.usedSampleLibraryKey : state.sampleLibraryKey;
+  const banner = buildDemoBannerContent(getLibraryByKey(libraryKey).documents.length, context, libraryKey);
   return `
     <div class="demo-banner ${context === "results" ? "demo-banner--results" : ""}">
       <p class="demo-banner__eyebrow">${banner.title}</p>
@@ -327,7 +355,7 @@ export function buildWorkflowStepStates(currentStepId = "levelSection") {
 export function buildAnalysisProgressView(progress) {
   const sourceParts = [];
   if (progress.sampleCount) {
-    sourceParts.push(pluralize(progress.sampleCount, "demo doc"));
+    sourceParts.push(pluralize(progress.sampleCount, "starter doc"));
   }
   if (progress.manualCount) {
     sourceParts.push(pluralize(progress.manualCount, "pasted doc"));
@@ -461,11 +489,12 @@ function computeWorkspaceReadiness() {
   const urlCount = countUrlEntries();
   const fileCount = state.workspace.uploadedFiles.length;
   const manualCount = countManualEntries();
-  const estimatedDocuments = (state.includeSampleData ? SAMPLE_DOCUMENTS.length : 0) + urlCount + fileCount + manualCount;
+  const sampleDocuments = getActiveSampleLibrary().documents;
+  const estimatedDocuments = (state.includeSampleData ? sampleDocuments.length : 0) + urlCount + fileCount + manualCount;
 
   let tone = "warning";
   let headline = "Add at least two documents to start";
-  let detail = "The analysis needs at least two documents. The fastest path is the demo setup or a small file upload set.";
+  let detail = "The analysis needs at least two documents. The fastest path is a built-in starter set or a small file upload set.";
 
   if (estimatedDocuments >= 2) {
     tone = "ready";
@@ -504,7 +533,7 @@ function buildRunPanelMarkup() {
       </div>
       <p class="run-panel__detail">${readiness.detail}</p>
       <div class="run-panel__metrics">
-        <span class="source-chip ${readiness.sampleEnabled ? "source-chip--active" : ""}">Demo ${readiness.sampleEnabled ? "on" : "off"}</span>
+        <span class="source-chip ${readiness.sampleEnabled ? "source-chip--active" : ""}">${escapeHtml(getActiveSampleLibrary().shortLabel)} ${readiness.sampleEnabled ? "on" : "off"}</span>
         <span class="source-chip ${readiness.urlCount ? "source-chip--active" : ""}">${readiness.urlCount} URL${readiness.urlCount === 1 ? "" : "s"}</span>
         <span class="source-chip ${readiness.fileCount ? "source-chip--active" : ""}">${readiness.fileCount} file${readiness.fileCount === 1 ? "" : "s"}</span>
         <span class="source-chip ${readiness.manualCount ? "source-chip--active" : ""}">${readiness.manualCount} pasted</span>
@@ -621,6 +650,7 @@ function buildUploadedFilesMarkup() {
 function buildStartPathMarkup() {
   const readiness = computeWorkspaceReadiness();
   const hasLiveInputs = readiness.urlCount || readiness.fileCount || readiness.manualCount;
+  const sampleLibrary = getActiveSampleLibrary();
 
   return `
     <div class="wizard-grid wizard-grid--source-start">
@@ -628,24 +658,33 @@ function buildStartPathMarkup() {
         <div class="start-path-card__header">
           <div>
             <p class="eyebrow">Path A</p>
-            <h3>Walk through the demo</h3>
+            <h3>Use a built-in starter set</h3>
           </div>
           <span class="doc-badge ${state.includeSampleData ? "doc-badge--ok" : ""}">
-            ${state.includeSampleData ? "Demo ready" : "Fastest setup"}
+            ${state.includeSampleData ? `${escapeHtml(sampleLibrary.shortLabel)} ready` : "Fastest setup"}
           </span>
         </div>
-        <p class="section-subtitle">Use the bundled sample library and example URLs to show the full guided review flow to stakeholders quickly.</p>
+        <p class="section-subtitle">Choose between the lightweight illustrative demo and a real extracted policy starter set without collecting source material first.</p>
         <div class="flow-card flow-card--compact">
-          <strong>Best for first-time reviewers</strong>
-          <p>Run a clean walkthrough without collecting source material first.</p>
+          <strong>${escapeHtml(sampleLibrary.label)}</strong>
+          <p>${escapeHtml(sampleLibrary.description)}</p>
         </div>
-        <div class="control-row">
-          <button class="ghost-button" type="button" data-load-demo>Load demo setup</button>
-          <button class="primary-button" type="button" data-run-demo>Run demo analysis</button>
+        <div class="source-library-picker">
+          ${Object.values(SAMPLE_LIBRARIES).map((library) => `
+            <button
+              class="toggle-btn ${state.sampleLibraryKey === library.key ? "active" : ""}"
+              type="button"
+              data-sample-library="${library.key}"
+            >${escapeHtml(library.label)}</button>
+          `).join("")}
+        </div>
+        <div class="control-row control-row--wrap">
+          <button class="ghost-button" type="button" data-load-demo>${sampleLibrary.isRealContent ? "Load real starter set" : "Load demo setup"}</button>
+          <button class="primary-button" type="button" data-run-demo>${sampleLibrary.isRealContent ? "Run real starter analysis" : "Run demo analysis"}</button>
         </div>
         <label class="toggle start-path-card__toggle">
           <input type="checkbox" data-include-sample ${state.includeSampleData ? "checked" : ""}>
-          Keep the built-in demo library included
+          Keep the selected starter set included
         </label>
       </section>
 
@@ -1116,7 +1155,9 @@ function renderProgressHeader() {
           if (isCurrent) {
             const currentLabel =
               route.id === "sources" && isSourcesWorkspaceEmpty()
-                ? "Load demo setup"
+                ? getActiveSampleLibrary().isRealContent
+                  ? "Load real starter set"
+                  : "Load demo setup"
                 : "Current";
             return `
               <button
@@ -3116,6 +3157,7 @@ function rerunAnalysisWithOverrides() {
 function resetWorkspace() {
   state.route = "sources";
   state.includeSampleData = false;
+  state.sampleLibraryKey = DEFAULT_SAMPLE_LIBRARY_KEY;
   state.activeSourceTab = "urls";
   state.workspace.urlsText = "";
   state.workspace.uploadedFiles = [];
@@ -3127,6 +3169,7 @@ function resetWorkspace() {
   state.analysisView.levelOverrides = {};
   state.analysisView.groupDecisions = {};
   state.analysisView.usedSampleData = false;
+  state.analysisView.usedSampleLibraryKey = DEFAULT_SAMPLE_LIBRARY_KEY;
   state.analysisView.result = null;
   state.analysisView.issues = [];
   persistState();
@@ -3164,22 +3207,26 @@ function scrollToSourceWorkspace() {
   }
 }
 
-function loadDemoSetup({ announce = true } = {}) {
+function loadDemoSetup({ announce = true, libraryKey = state.sampleLibraryKey } = {}) {
+  const library = SAMPLE_LIBRARIES[libraryKey] || SAMPLE_LIBRARIES[DEFAULT_SAMPLE_LIBRARY_KEY];
   state.includeSampleData = true;
+  state.sampleLibraryKey = library.key;
   state.activeSourceTab = "urls";
-  state.workspace.urlsText = SAMPLE_URLS.join("\n");
+  state.workspace.urlsText = library.urls.join("\n");
   persistState();
   renderApp();
   if (announce) {
     renderStatus(
-      "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
+      library.isRealContent
+        ? "Real starter set loaded. Extracted policy examples and published source URLs are ready in the workspace."
+        : "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
     );
   }
 }
 
 async function runAnalysis() {
   const manualDocuments = loadManualDocuments();
-  const sampleDocuments = state.includeSampleData ? SAMPLE_DOCUMENTS : [];
+  const sampleDocuments = state.includeSampleData ? getActiveSampleLibrary().documents : [];
   const urlCount = countUrlEntries();
   const progress = {
     phase: "collect",
@@ -3233,7 +3280,7 @@ async function runAnalysis() {
 
     if (documents.length < 2) {
       renderStatus(
-        "Add at least two documents. The quickest path is the built-in demo library or a small staged file set.",
+        "Add at least two documents. The quickest path is a built-in starter set or a small staged file set.",
         "warning"
       );
       return;
@@ -3258,6 +3305,7 @@ async function runAnalysis() {
     state.analysisView.query = "";
     state.analysisView.filter = "all";
     state.analysisView.usedSampleData = state.includeSampleData;
+    state.analysisView.usedSampleLibraryKey = state.sampleLibraryKey;
     state.analysisView.issues = issues;
     persistState();
     renderStatus(
@@ -3405,6 +3453,14 @@ function wireStepEvents(scope) {
   scope.querySelectorAll("[data-include-sample]").forEach((sampleToggle) => {
     sampleToggle.addEventListener("change", () => {
       state.includeSampleData = sampleToggle.checked;
+      persistState();
+      renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-sample-library]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.sampleLibraryKey = button.getAttribute("data-sample-library") || DEFAULT_SAMPLE_LIBRARY_KEY;
       persistState();
       renderApp();
     });

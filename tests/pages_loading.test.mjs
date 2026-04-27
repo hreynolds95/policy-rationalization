@@ -21,5 +21,5 @@ test("buildAnalysisProgressView reports active URL fetch progress and skipped fi
   assert.match(view.detail, /Fetching URL 2 of 2/);
   assert.equal(view.steps[1].state, "skipped");
   assert.equal(view.steps[2].state, "active");
-  assert.match(view.steps[0].detail, /3 demo docs, 1 pasted doc, 2 URLs/);
+  assert.match(view.steps[0].detail, /3 starter docs, 1 pasted doc, 2 URLs/);
 });

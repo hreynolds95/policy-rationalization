@@ -1902,6 +1902,12 @@ button:hover,
   padding-top: 2px;
 }
 
+.source-library-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .control-row--wrap {
   flex-wrap: wrap;
 }
