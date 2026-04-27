@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Version Compare</title>
-    <link rel="stylesheet" href="./styles.css?v=20260427g" />
+    <link rel="stylesheet" href="./styles.css?v=20260427h" />
   </head>
   <body>
     <main class="shell">
       <section class="card">
         <header class="header">
           <h1>Version Compare</h1>
-          <p>Compare two versions and review exact additions and removals.</p>
+          <p>Compare two versions while keeping the legacy text intact and showing proposed edits as separate suggestions.</p>
         </header>
 
         <details class="help-disclosure">
@@ -20,7 +20,7 @@
             <ol>
               <li>Select an input mode: <strong>Pasted Text</strong>, <strong>Files</strong>, or <strong>URLs</strong>.</li>
               <li>Provide original and updated versions.</li>
-              <li>Click <strong>Compare</strong> to view summary plus highlighted changes.</li>
+              <li>Click <strong>Compare</strong> to view summary plus a legacy-preserving redline.</li>
               <li>Export with <strong>Download HTML Report</strong> or <strong>Download PDF Report</strong>.</li>
             </ol>
             <p>URL mode may be blocked by CORS/auth on private links. If that happens, paste text or upload files.</p>
@@ -75,13 +75,13 @@
           <ul id="summary-list"></ul>
 
           <div class="result-toggles">
-            <button id="toggle-inline" type="button" class="toggle-btn" aria-expanded="false">Show Inline Diff</button>
+            <button id="toggle-inline" type="button" class="toggle-btn" aria-expanded="false">Show Redline</button>
             <button id="toggle-side" type="button" class="toggle-btn" aria-expanded="false">Show Side-by-Side</button>
           </div>
 
           <div id="inline-section" class="result-section hidden">
-            <h2>Inline Diff</h2>
-            <p class="legend"><span class="added">Added</span> <span class="removed">Removed</span></p>
+            <h2>Legacy-Preserving Redline</h2>
+            <p class="legend"><span class="legacy-token">Legacy text</span> <span class="suggestion-chip">Proposed suggestion</span></p>
             <div id="inline-diff" class="inline-diff"></div>
           </div>
 
@@ -100,6 +100,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260427g"></script>
+    <script type="module" src="./app.js?v=20260427h"></script>
   </body>
 </html>

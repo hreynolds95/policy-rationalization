@@ -1,9 +1,6 @@
 import {
   buildSideBySide,
-  myersDiff,
-  mergeSegments,
   runRedlineCompare,
-  tokenizeWords,
 } from "../redline.mjs";
 
 const modeButtons = [...document.querySelectorAll('.mode-btn')];
@@ -151,7 +148,7 @@ function setToggleButtonState(button, visible, showLabel, hideLabel) {
 function resetResultPanels() {
   setResultSectionVisibility(inlineSectionEl, false);
   setResultSectionVisibility(sideSectionEl, false);
-  setToggleButtonState(toggleInlineBtn, false, 'Show Inline Diff', 'Hide Inline Diff');
+  setToggleButtonState(toggleInlineBtn, false, 'Show Redline', 'Hide Redline');
   setToggleButtonState(toggleSideBtn, false, 'Show Side-by-Side', 'Hide Side-by-Side');
 }
 
@@ -219,7 +216,7 @@ toggleInlineBtn?.addEventListener('click', () => {
   const isVisible = !inlineSectionEl.classList.contains('hidden');
   const next = !isVisible;
   setResultSectionVisibility(inlineSectionEl, next);
-  setToggleButtonState(toggleInlineBtn, next, 'Show Inline Diff', 'Hide Inline Diff');
+  setToggleButtonState(toggleInlineBtn, next, 'Show Redline', 'Hide Redline');
 });
 
 toggleSideBtn?.addEventListener('click', () => {
@@ -271,13 +268,43 @@ function renderSummary(summary) {
   }
 }
 
+function buildLegacyPreservingEntries(segments) {
+  const entries = [];
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+
+    if (segment.type === 'equal') {
+      entries.push({ kind: 'legacy', text: segment.text });
+      continue;
+    }
+
+    if (segment.type === 'remove') {
+      const next = segments[index + 1];
+      entries.push({ kind: 'legacy', text: segment.text });
+      if (next?.type === 'add') {
+        entries.push({ kind: 'suggestion', text: `[proposed replace with: ${next.text}]` });
+        index += 1;
+      } else {
+        entries.push({ kind: 'suggestion', text: '[proposed remove]' });
+      }
+      continue;
+    }
+
+    if (segment.type === 'add') {
+      entries.push({ kind: 'suggestion', text: `[proposed add: ${segment.text}]` });
+    }
+  }
+
+  return entries;
+}
+
 function renderInlineDiff(segments) {
   inlineDiffEl.innerHTML = '';
-  for (const segment of segments) {
+  for (const entry of buildLegacyPreservingEntries(segments)) {
     const span = document.createElement('span');
-    span.textContent = segment.text;
-    if (segment.type === 'add') span.className = 'added';
-    if (segment.type === 'remove') span.className = 'removed';
+    span.textContent = entry.text;
+    span.className = entry.kind === 'suggestion' ? 'suggestion-chip' : 'legacy-token';
     inlineDiffEl.appendChild(span);
   }
 }
@@ -426,10 +453,10 @@ function buildReportHtml(data) {
     .map(([k, v]) => `<li><strong>${escapeHtml(k)}:</strong> ${escapeHtml(v)}</li>`)
     .join('');
 
-  const inlineHtml = (data.segments || [])
-    .map((s) => {
-      const cls = s.type === 'add' ? 'added' : s.type === 'remove' ? 'removed' : '';
-      return `<span class="${cls}">${escapeHtml(s.text || '')}</span>`;
+  const inlineHtml = buildLegacyPreservingEntries(data.segments || [])
+    .map((entry) => {
+      const cls = entry.kind === 'suggestion' ? 'suggestion-chip' : 'legacy-token';
+      return `<span class="${cls}">${escapeHtml(entry.text || '')}</span>`;
     })
     .join('');
 
@@ -453,8 +480,10 @@ body { font-family: Arial, sans-serif; margin: 0; color: #f5f5f5; background: ra
 h1, h2 { color: #fff; }
 .meta { color: #d3d3d3; margin: 6px 0; }
 .diff { border: 1px solid #2f2f2f; border-radius: 8px; background: #0f0f0f; padding: 12px; white-space: pre-wrap; line-height: 1.5; }
-.added, .added-cell { background: rgba(34, 197, 94, 0.22); color: #b7f8cb; }
-.removed, .removed-cell { background: rgba(239, 68, 68, 0.22); color: #ffc4c4; text-decoration: line-through; }
+.legacy-token { color: #f5f5f5; }
+.suggestion-chip { background: rgba(239, 68, 68, 0.22); color: #ffc4c4; border-radius: 6px; padding: 1px 4px; }
+.added-cell { background: rgba(34, 197, 94, 0.22); color: #b7f8cb; }
+.removed-cell { background: rgba(239, 68, 68, 0.22); color: #ffc4c4; }
 table { width: 100%; border-collapse: collapse; margin-top: 12px; }
 th, td { border: 1px solid #2f2f2f; padding: 8px; vertical-align: top; white-space: pre-wrap; }
 th { background: #151515; color: #f5f5f5; text-align: left; }
@@ -468,7 +497,7 @@ th { background: #151515; color: #f5f5f5; text-align: left; }
 <div class="meta"><strong>Updated Source:</strong> ${escapeHtml(source.updated_label || '')}</div>
 <h2>Summary</h2>
 <ul>${summaryHtml}</ul>
-<h2>Inline Diff</h2>
+<h2>Legacy-Preserving Redline</h2>
 <div class="diff">${inlineHtml}</div>
 <h2>Side-by-Side Diff</h2>
 <table><thead><tr><th>Original</th><th>Updated</th></tr></thead><tbody>${sideRows}</tbody></table>
@@ -599,7 +628,7 @@ async function downloadPdfReport() {
     y += 16;
   }
 
-  function drawInlineRow(text, type) {
+  function drawInlineRow(text, kind) {
     const rowText = (text || '').replace(/\s+/g, ' ').trim();
     if (!rowText) return;
 
@@ -607,18 +636,14 @@ async function downloadPdfReport() {
     const rowHeight = lines.length * 11 + 6;
     ensureSpace(rowHeight + 4);
 
-    if (type === 'add') {
-      pdf.setFillColor(...palette.addBg);
-      pdf.roundedRect(contentX, y - 9, contentW, rowHeight, 4, 4, 'F');
-    } else if (type === 'remove') {
+    if (kind === 'suggestion') {
       pdf.setFillColor(...palette.removeBg);
       pdf.roundedRect(contentX, y - 9, contentW, rowHeight, 4, 4, 'F');
     }
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    if (type === 'add') pdf.setTextColor(...palette.addText);
-    else if (type === 'remove') pdf.setTextColor(...palette.removeText);
+    if (kind === 'suggestion') pdf.setTextColor(...palette.removeText);
     else pdf.setTextColor(...palette.text);
 
     let lineY = y;
@@ -711,9 +736,9 @@ async function downloadPdfReport() {
   writeWrapped(`Words removed: ${s.removed_words ?? 0}`);
   writeWrapped(`Net word change: ${s.net_word_change ?? 0}`);
 
-  sectionTitle('Inline Diff');
-  for (const seg of (lastResult.segments || []).slice(0, 450)) {
-    drawInlineRow(seg.text, seg.type);
+  sectionTitle('Legacy-Preserving Redline');
+  for (const entry of buildLegacyPreservingEntries(lastResult.segments || []).slice(0, 450)) {
+    drawInlineRow(entry.text, entry.kind);
   }
 
   sectionTitle('Side-by-Side Diff');

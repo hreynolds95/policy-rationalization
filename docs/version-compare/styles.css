@@ -322,17 +322,26 @@ button:disabled {
   word-break: break-word;
 }
 
-.added,
+.legacy-token {
+  color: var(--ink);
+}
+
+.suggestion-chip {
+  display: inline;
+  background: var(--remove-bg);
+  color: var(--remove-ink);
+  border-radius: 6px;
+  padding: 1px 4px;
+}
+
 .added-cell {
   background: var(--add-bg);
   color: var(--add-ink);
 }
 
-.removed,
 .removed-cell {
   background: var(--remove-bg);
   color: var(--remove-ink);
-  text-decoration: line-through;
 }
 
 .table-wrap {
