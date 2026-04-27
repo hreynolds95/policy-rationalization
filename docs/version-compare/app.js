@@ -114,8 +114,13 @@ function setMode(mode) {
     const isActive = btn.dataset.mode === mode;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    btn.setAttribute('tabindex', isActive ? '0' : '-1');
   });
-  Object.entries(panels).forEach(([name, panel]) => panel.classList.toggle('hidden', name !== mode));
+  Object.entries(panels).forEach(([name, panel]) => {
+    const isActivePanel = name === mode;
+    panel.classList.toggle('hidden', !isActivePanel);
+    panel.setAttribute('aria-hidden', isActivePanel ? 'false' : 'true');
+  });
 }
 
 function clearComparisonState() {
@@ -136,6 +141,29 @@ modeButtons.forEach((btn) =>
     setStatus('ready');
   })
 );
+
+modeButtons.forEach((btn, index) => {
+  btn.addEventListener('keydown', (event) => {
+    const key = event.key;
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
+    event.preventDefault();
+
+    let nextIndex = index;
+    if (key === 'ArrowRight') nextIndex = (index + 1) % modeButtons.length;
+    if (key === 'ArrowLeft') nextIndex = (index - 1 + modeButtons.length) % modeButtons.length;
+    if (key === 'Home') nextIndex = 0;
+    if (key === 'End') nextIndex = modeButtons.length - 1;
+
+    const nextButton = modeButtons[nextIndex];
+    const nextMode = nextButton.dataset.mode;
+    if (nextMode !== activeMode) {
+      setMode(nextMode);
+      clearComparisonState();
+      setStatus('ready');
+    }
+    nextButton.focus();
+  });
+});
 setMode(activeMode);
 clearComparisonState();
 setStatus('ready');

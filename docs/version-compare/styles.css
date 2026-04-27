@@ -200,6 +200,15 @@ button {
   font-weight: 700;
 }
 
+button:focus-visible,
+textarea:focus-visible,
+input[type="url"]:focus-visible,
+input[type="file"]:focus-visible,
+.help-disclosure summary:focus-visible {
+  outline: 2px solid #f3f4f6;
+  outline-offset: 2px;
+}
+
 .primary {
   background: var(--brand);
   color: #000;

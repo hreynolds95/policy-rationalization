@@ -30,27 +30,27 @@
         </details>
 
         <section class="mode-picker" role="tablist" aria-label="Input mode">
-          <button type="button" class="mode-btn active" data-mode="text" aria-selected="true">Pasted Text</button>
-          <button type="button" class="mode-btn" data-mode="files" aria-selected="false">Files (.txt/.pdf)</button>
-          <button type="button" class="mode-btn" data-mode="urls" aria-selected="false">URLs</button>
+          <button type="button" id="tab-text" class="mode-btn active" data-mode="text" role="tab" tabindex="0" aria-selected="true" aria-controls="panel-text">Pasted Text</button>
+          <button type="button" id="tab-files" class="mode-btn" data-mode="files" role="tab" tabindex="-1" aria-selected="false" aria-controls="panel-files">Files (.txt/.pdf)</button>
+          <button type="button" id="tab-urls" class="mode-btn" data-mode="urls" role="tab" tabindex="-1" aria-selected="false" aria-controls="panel-urls">URLs</button>
         </section>
         <p class="mode-hint">Recommended start: <strong>Pasted Text</strong> for the fastest compare.</p>
 
-        <section id="panel-text" class="mode-panel">
+        <section id="panel-text" class="mode-panel" role="tabpanel" aria-labelledby="tab-text">
           <label for="text-a">Original text</label>
           <textarea id="text-a" rows="8" placeholder="Paste original version"></textarea>
           <label for="text-b">Updated text</label>
           <textarea id="text-b" rows="8" placeholder="Paste updated version"></textarea>
         </section>
 
-        <section id="panel-files" class="mode-panel hidden">
+        <section id="panel-files" class="mode-panel hidden" role="tabpanel" aria-labelledby="tab-files" aria-hidden="true">
           <label for="file-a">Original file (.txt or .pdf)</label>
           <input id="file-a" type="file" accept=".txt,.pdf,text/plain,application/pdf" />
           <label for="file-b">Updated file (.txt or .pdf)</label>
           <input id="file-b" type="file" accept=".txt,.pdf,text/plain,application/pdf" />
         </section>
 
-        <section id="panel-urls" class="mode-panel hidden">
+        <section id="panel-urls" class="mode-panel hidden" role="tabpanel" aria-labelledby="tab-urls" aria-hidden="true">
           <label for="url-a">Original URL</label>
           <input id="url-a" type="url" placeholder="https://..." />
           <label for="url-b">Updated URL</label>
@@ -59,11 +59,11 @@
 
         <section class="actions">
           <div class="actions-main">
-            <button id="compare-btn" type="button" class="primary">Compare</button>
-            <button id="load-sample" type="button" class="secondary sample-btn">Try Sample Compare</button>
+            <button id="compare-btn" type="button" class="primary">Compare Versions</button>
+            <button id="load-sample" type="button" class="secondary sample-btn">Load Sample</button>
           </div>
           <div id="export-actions" class="export-actions hidden">
-            <span class="export-label">Export</span>
+            <span class="export-label">Export Report</span>
             <button id="download-html" type="button" class="export-btn" disabled>HTML</button>
             <button id="download-pdf" type="button" class="export-btn" disabled>PDF</button>
           </div>
