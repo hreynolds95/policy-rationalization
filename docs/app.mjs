@@ -10,7 +10,7 @@ import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:29 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:37 PM EDT";
 const GROUP_DECISION_OPTIONS = [
   { value: "accept", label: "Accept" },
   { value: "revise", label: "Revise" },
@@ -123,6 +123,10 @@ function getGroupDecision(group) {
     note: "",
     updatedAt: "",
   };
+}
+
+function hasGroupDecision(group, groupDecisions = state.analysisView.groupDecisions) {
+  return Boolean((groupDecisions[getRequirementGroupKey(group)] || {}).decision);
 }
 
 function deriveTitleFromUrl(url) {
@@ -881,7 +885,13 @@ function buildLevelReviewStepMarkup() {
 }
 
 function buildGroupsStepMarkup() {
-  const groupsHtml = buildRequirementGroupMarkup(state.analysisView.result, state.analysisView.result.requirementGroups);
+  const filtered = filterAnalysisView(
+    state.analysisView.result,
+    state.analysisView.issues,
+    state.analysisView.query,
+    state.analysisView.filter
+  );
+  const groupsHtml = buildRequirementGroupMarkup(state.analysisView.result, filtered.groups);
   return `
     <section class="wizard-step-page">
       ${buildStepHero("groups")}
@@ -890,6 +900,15 @@ function buildGroupsStepMarkup() {
         <div class="step-card-header">
           <h3>Requirement mapping groups</h3>
           <p class="section-subtitle">Review cross-document requirement matches, 1:1 mapping conflicts, hierarchy watch-outs, and inline redline proposals.</p>
+        </div>
+        <div class="filter-toolbar">
+          <div class="toggle-group" data-filter-group>
+            ${buildFilterButton("all", "All", state.analysisView.filter)}
+            ${buildFilterButton("undecided", "Undecided", state.analysisView.filter)}
+            ${buildFilterButton("level", "Hierarchy review", state.analysisView.filter)}
+            ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
+            ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
+          </div>
         </div>
         <div class="results-section">${groupsHtml}</div>
       </section>
@@ -928,6 +947,7 @@ function buildDetailsStepMarkup() {
         <div class="filter-toolbar">
           <div class="toggle-group" data-filter-group>
             ${buildFilterButton("all", "All", state.analysisView.filter)}
+            ${buildFilterButton("undecided", "Undecided", state.analysisView.filter)}
             ${buildFilterButton("level", "Hierarchy review", state.analysisView.filter)}
             ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
             ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
@@ -964,7 +984,15 @@ function buildExportStepMarkup() {
     state.analysisView.filter
   );
   const issuesHtml = buildIssuesMarkup(filtered.issues);
-  const viewLabel = state.analysisView.filter === "all" ? "All results" : `${state.analysisView.filter} filter`;
+  const viewLabels = {
+    all: "All results",
+    undecided: "Undecided groups",
+    level: "Hierarchy review",
+    review: "Conflict flags",
+    ready: "Clean mappings",
+    orphan: "Unmapped docs",
+  };
+  const viewLabel = viewLabels[state.analysisView.filter] || `${state.analysisView.filter} filter`;
   const decisionSummary = summarizeDecisions(filtered.groups, state.analysisView.groupDecisions);
   return `
     <section class="wizard-step-page">
@@ -1902,7 +1930,7 @@ function matchesSearch(haystacks, query) {
   return haystacks.some((value) => value.toLowerCase().includes(query));
 }
 
-function filterAnalysisView(result, issues, rawQuery, filter) {
+function filterAnalysisView(result, issues, rawQuery, filter, groupDecisions = state.analysisView.groupDecisions) {
   const query = rawQuery.trim().toLowerCase();
   const documents = buildDocumentViewModel(result);
 
@@ -1931,6 +1959,9 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
     if (filter === "review") {
       return groupReview;
     }
+    if (filter === "undecided") {
+      return !hasGroupDecision(group, groupDecisions);
+    }
     if (filter === "level") {
       return (
         group.checks.hierarchyReviewStatus === "review-needed" ||
@@ -1958,6 +1989,17 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
     if (filter === "review") {
       return document.needsReview;
     }
+    if (filter === "undecided") {
+      return result.requirementGroups.some((group) => {
+        if (hasGroupDecision(group, groupDecisions)) {
+          return false;
+        }
+        return group.requirementIds.some((requirementId) => {
+          const requirement = result.requirements.find((candidate) => candidate.requirementId === requirementId);
+          return requirement?.documentId === document.id;
+        });
+      });
+    }
     if (filter === "level") {
       return document.needsReview || document.documentLevel.levelFit !== "aligned";
     }
@@ -1983,6 +2025,11 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
     if (!searchMatch) {
       return false;
     }
+    if (filter === "undecided") {
+      return result.requirementGroups.some(
+        (group) => !hasGroupDecision(group, groupDecisions) && group.requirementIds.includes(requirement.requirementId)
+      );
+    }
     if (filter === "level") {
       return requirement.hierarchyReview.alignment !== "aligned";
     }
@@ -2006,7 +2053,13 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
 }
 
 export function buildExportPayload(result, issues, rawQuery, filter, threshold = 0.45, options = {}) {
-  const filtered = filterAnalysisView(result, issues, rawQuery, filter);
+  const filtered = filterAnalysisView(
+    result,
+    issues,
+    rawQuery,
+    filter,
+    options.groupDecisions || state.analysisView.groupDecisions
+  );
   const strongestCanonicalRequirement = result.requirementGroups[0]
     ? result.requirements.find(
         (requirement) => requirement.requirementId === result.requirementGroups[0].recommendedPrimaryRequirementId

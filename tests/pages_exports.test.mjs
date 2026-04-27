@@ -89,6 +89,53 @@ test("exports carry reviewer decisions and notes", () => {
   assert.match(html, /Reviewer note:<\/strong> Need policy owner wording review before accepting/);
 });
 
+test("undecided filter isolates groups without a selected decision", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Records Retention Policy",
+        source: "manual://a",
+        text: "Retention Requirements\n\nRecords must be retained for seven years.",
+      },
+      {
+        id: "b",
+        title: "Records Retention Policy Copy",
+        source: "manual://b",
+        text: "Retention Requirements\n\nRecords must be retained for seven years across all entities.",
+      },
+      {
+        id: "c",
+        title: "Complaint Escalation Policy",
+        source: "manual://c",
+        text: "Complaint Escalation\n\nCustomer complaints must be escalated to Compliance within one business day.",
+      },
+      {
+        id: "d",
+        title: "Complaint Escalation Procedure",
+        source: "manual://d",
+        text: "Complaint Escalation Workflow\n\nStep 1 escalate customer complaints to Compliance within one business day. Step 2 archive the escalation record.",
+      },
+    ],
+    0.35
+  );
+
+  const decidedGroup = result.requirementGroups.find((group) => group.recommendationBucket === "quick-win");
+  const decidedKey = [...decidedGroup.requirementIds].sort().join("::");
+  const payload = buildExportPayload(result, [], "", "undecided", 0.35, {
+    groupDecisions: {
+      [decidedKey]: {
+        decision: "accept",
+        note: "Ready to move forward.",
+        updatedAt: "2026-04-27T22:10:00.000Z",
+      },
+    },
+  });
+
+  assert.equal(payload.filtered.groups.length, 1);
+  assert.equal(payload.filtered.groups[0].recommendationBucket, "material-change");
+});
+
 test("buildMarkdownExport summarizes the current visible analysis view", () => {
   const result = analyzeDocuments(
     [
