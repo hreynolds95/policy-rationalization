@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   analyzeDocuments,
   evaluateDocumentLevel,
+  extractRequirementsFromDocument,
   normalizeGoogleExportUrl,
   parseCsv,
   tokenize,
@@ -81,6 +82,32 @@ test("evaluateDocumentLevel flags procedural content inside a policy", () => {
   assert.equal(level.inferredType, "policy");
   assert.equal(level.levelFit, "misaligned");
   assert.ok(level.levelIssues.some((issue) => issue.includes("procedural")));
+});
+
+test("extractRequirementsFromDocument splits bullet and sentence requirements with anchors", () => {
+  const requirements = extractRequirementsFromDocument(
+    {
+      id: "policy-1",
+      title: "Access Policy",
+      text: [
+        "Access Requirements",
+        "",
+        "- Access must be approved by a manager.",
+        "- Access must be reviewed quarterly.",
+        "",
+        "Logging Requirements",
+        "",
+        "Logs must be retained for one year. Logs must be available for compliance review.",
+      ].join("\n"),
+    },
+    "policy"
+  );
+
+  assert.equal(requirements.length, 4);
+  assert.equal(requirements[0].sourceLocation.section, "Access Requirements");
+  assert.equal(requirements[0].sourceLocation.itemIndex, 1);
+  assert.match(requirements[3].requirementText, /compliance review/);
+  assert.equal(requirements[3].requirementType, "policy-level requirement");
 });
 
 test("analyzeDocuments exposes mixed-level groups for review", () => {
@@ -168,4 +195,22 @@ test("analyzeDocuments buckets consolidation recommendations into quick wins and
   assert.equal(result.groups.length, 2);
   assert.ok(result.groups.some((group) => group.recommendationBucket === "quick-win"));
   assert.ok(result.groups.some((group) => group.recommendationBucket === "material-change"));
+});
+
+test("analyzeDocuments exposes extracted requirement inventory per document", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Records Retention Policy",
+        source: "manual://a",
+        text: "Retention Requirements\n\nRecords must be retained for seven years.\nRecords must be available for legal review.",
+      },
+    ],
+    0.45
+  );
+
+  assert.equal(result.requirements.length, 2);
+  assert.equal(result.documents[0].requirementCount, 2);
+  assert.equal(result.documents[0].requirements[0].sourceLocation.section, "Retention Requirements");
 });

@@ -33,6 +33,21 @@ const PROCEDURE_TERMS = [
   "step",
   "steps",
 ];
+const REQUIREMENT_CUE_TERMS = [
+  "must",
+  "shall",
+  "required",
+  "requires",
+  "may not",
+  "cannot",
+  "should",
+  "will",
+  "step",
+  "steps",
+  "process",
+  "workflow",
+];
+const BULLET_PREFIX_RE = /^([-*•]|\d+[.)]|[a-zA-Z][.)])\s+/;
 
 export const DOCUMENT_TYPES = ["policy", "standard", "procedure"];
 
@@ -152,6 +167,84 @@ function countMatches(text, terms) {
   return terms.reduce((sum, term) => sum + (lower.includes(term) ? 1 : 0), 0);
 }
 
+function normalizeRequirementText(text) {
+  return text
+    .replace(BULLET_PREFIX_RE, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function containsRequirementCue(text) {
+  const lower = text.toLowerCase();
+  return REQUIREMENT_CUE_TERMS.some((term) => lower.includes(term));
+}
+
+function looksLikeHeadingBlock(text) {
+  const normalized = text.trim();
+  if (!normalized) {
+    return false;
+  }
+  if (containsRequirementCue(normalized)) {
+    return false;
+  }
+  if (normalized.length > 90) {
+    return false;
+  }
+  return !/[.;!?]/.test(normalized) || normalized.endsWith(":");
+}
+
+function inferRequirementType(text, documentLevelType = "policy") {
+  const lower = text.toLowerCase();
+  if (/\bstep\s+\d+\b/.test(lower) || countMatches(lower, PROCEDURE_TERMS) >= 2) {
+    return "procedure-like content";
+  }
+  if (countMatches(lower, STANDARD_TERMS) > countMatches(lower, POLICY_TERMS)) {
+    return "standard-level requirement";
+  }
+  if (documentLevelType === "standard") {
+    return "standard-level requirement";
+  }
+  return "policy-level requirement";
+}
+
+function splitRequirementCandidates(block) {
+  const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) {
+    return [];
+  }
+
+  const bulletLines = lines.filter((line) => BULLET_PREFIX_RE.test(line));
+  if (lines.length > 1 && bulletLines.length >= Math.ceil(lines.length / 2)) {
+    return lines.map((line, index) => ({
+      text: normalizeRequirementText(line),
+      itemIndex: index + 1,
+    }));
+  }
+
+  const paragraph = normalizeRequirementText(lines.join(" "));
+  const sentenceParts = paragraph
+    .split(/(?<=[.;])\s+(?=[A-Z0-9])/)
+    .map((part) => normalizeRequirementText(part))
+    .filter(Boolean);
+
+  const candidates = sentenceParts.filter((part) => containsRequirementCue(part) || part.length >= 40);
+  if (candidates.length > 1) {
+    return candidates.map((text, index) => ({
+      text,
+      itemIndex: index + 1,
+    }));
+  }
+
+  return paragraph
+    ? [
+        {
+          text: paragraph,
+          itemIndex: 1,
+        },
+      ]
+    : [];
+}
+
 export function evaluateDocumentLevel(document, forcedType = "") {
   const title = document.title.toLowerCase();
   const text = document.text.toLowerCase();
@@ -222,6 +315,58 @@ export function evaluateDocumentLevel(document, forcedType = "") {
       procedure: procedureSignals,
     },
   };
+}
+
+export function extractRequirementsFromDocument(document, documentLevelType = "policy") {
+  const blocks = String(document.text || "")
+    .split(/\n\s*\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const fallbackBlocks = !blocks.length
+    ? String(document.text || "")
+        .split(/\n+/)
+        .map((block) => block.trim())
+        .filter(Boolean)
+    : blocks;
+
+  const requirements = [];
+  let activeSection = "Document body";
+  let requirementIndex = 0;
+
+  fallbackBlocks.forEach((block, blockIndex) => {
+    if (looksLikeHeadingBlock(block)) {
+      activeSection = normalizeRequirementText(block).replace(/:$/, "") || activeSection;
+      return;
+    }
+
+    const candidates = splitRequirementCandidates(block)
+      .map((candidate) => ({
+        ...candidate,
+        text: normalizeRequirementText(candidate.text),
+      }))
+      .filter((candidate) => candidate.text && !looksLikeHeadingBlock(candidate.text));
+
+    candidates.forEach((candidate) => {
+      requirementIndex += 1;
+      requirements.push({
+        requirementId: `${String(document.id)}::req-${requirementIndex}`,
+        documentId: document.id,
+        sourceDocumentTitle: document.title,
+        sourceDocumentType: documentLevelType,
+        sourceLocation: {
+          section: activeSection,
+          paragraphIndex: blockIndex + 1,
+          itemIndex: candidate.itemIndex,
+        },
+        requirementText: candidate.text,
+        normalizedRequirementText: candidate.text.toLowerCase().replace(/\s+/g, " ").trim(),
+        requirementType: inferRequirementType(candidate.text, documentLevelType),
+      });
+    });
+  });
+
+  return requirements;
 }
 
 function evaluateConstraints(group, documentById) {
@@ -368,14 +513,22 @@ export function analyzeDocuments(documents, threshold = 0.45, levelOverrides = {
     source: document.source || `manual://document-${index + 1}`,
     text: document.text || "",
   }));
-  const documentsWithLevel = normalizedDocuments.map((document) => ({
-    ...document,
-    documentLevel: evaluateDocumentLevel(document, levelOverrides[document.id] || ""),
-  }));
+  const documentsWithLevel = normalizedDocuments.map((document) => {
+    const documentLevel = evaluateDocumentLevel(document, levelOverrides[document.id] || "");
+    const requirements = extractRequirementsFromDocument(document, documentLevel.inferredType);
+    return {
+      ...document,
+      documentLevel,
+      requirements,
+      requirementCount: requirements.length,
+    };
+  });
   const edges = computeSimilarityEdges(documentsWithLevel, threshold);
   const groups = buildDuplicateGroups(documentsWithLevel, edges);
+  const requirements = documentsWithLevel.flatMap((document) => document.requirements);
   return {
     documents: documentsWithLevel,
+    requirements,
     edges,
     groups,
   };

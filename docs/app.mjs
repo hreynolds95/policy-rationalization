@@ -34,8 +34,8 @@ const WIZARD_ROUTES = [
     id: "level-review",
     hash: "#/level-review",
     step: "Step 2",
-    title: "Review document level",
-    subtitle: "Confirm each document is operating at the correct requirement level before consolidation.",
+    title: "Review requirement inventory",
+    subtitle: "Confirm the extracted requirement units before moving into mapping and consolidation review.",
   },
   {
     id: "groups",
@@ -776,6 +776,7 @@ function buildAnalysisSummaryMarkup() {
         <div class="review-context__meta">
           <span class="source-chip source-chip--active">Canonical: ${escapeHtml(strongestCanonical)}</span>
           <span class="doc-badge">Docs ${result.documents.length}</span>
+          <span class="doc-badge">Reqs ${result.requirements.length}</span>
           <span class="doc-badge doc-badge--warn">Pairs ${result.edges.length}</span>
           <span class="doc-badge doc-badge--ok">Groups ${result.groups.length}</span>
         </div>
@@ -785,17 +786,17 @@ function buildAnalysisSummaryMarkup() {
 }
 
 function buildLevelReviewStepMarkup() {
-  const levelHtml = buildLevelMarkup(state.analysisView.result.documents);
+  const requirementInventoryHtml = buildRequirementInventoryMarkup(state.analysisView.result.documents);
   return `
     <section class="wizard-step-page">
       ${buildStepHero("level-review")}
       ${buildAnalysisSummaryMarkup()}
       <section class="panel table-panel">
         <div class="step-card-header">
-          <h3>Document level evaluation</h3>
-          <p class="section-subtitle">Check inferred type and fix level mismatches.</p>
+          <h3>Requirement inventory</h3>
+          <p class="section-subtitle">Review the extracted requirement units and source anchors before moving into mapping and consolidation.</p>
         </div>
-        <div class="results-section">${levelHtml}</div>
+        <div class="results-section">${requirementInventoryHtml}</div>
       </section>
       ${buildStepFooter("level-review")}
     </section>
@@ -1216,18 +1217,19 @@ function buildSummary(result) {
   const levelReviewCount = result.documents.filter(
     (document) => document.documentLevel.levelFit !== "aligned"
   ).length;
+  const requirementCount = result.requirements.length;
   const quickWinCount = result.groups.filter((group) => group.recommendationBucket === "quick-win").length;
   const materialChangeCount = result.groups.filter((group) => group.recommendationBucket === "material-change").length;
   if (!result.groups.length) {
     if (!result.edges.length) {
-      return `No consolidation cluster cleared the current threshold. ${levelReviewCount ? `${levelReviewCount} document(s) still need level review before consolidation work.` : "The document set may simply be cleanly separated."}`;
+      return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). No consolidation cluster cleared the current threshold yet. ${levelReviewCount ? `${levelReviewCount} document(s) still show level issues worth cleaning up before consolidation work.` : "The document set may simply be cleanly separated."}`;
     }
-    return `A few documents overlap, but they do not yet form a strong duplicate group. ${levelReviewCount ? `${levelReviewCount} document(s) also need level review first.` : "Review the top pairs first and consider lowering the threshold slightly if you want broader clustering."}`;
+    return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). A few documents overlap, but they do not yet form a strong duplicate group. ${levelReviewCount ? `${levelReviewCount} document(s) still show level issues worth cleaning up first.` : "Review the top pairs first and consider lowering the threshold slightly if you want broader clustering."}`;
   }
 
   const strongest = result.groups[0];
   const primary = result.documents.find((document) => document.id === strongest.recommendedPrimaryId);
-  return `${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. ${quickWinCount} quick win group(s) and ${materialChangeCount} material change group(s) are visible. ${levelReviewCount ? `${levelReviewCount} document(s) show possible policy-versus-standard-versus-procedure level issues and should be corrected before consolidation.` : "The recommendation keeps required structure intact and pushes brand scope, regulatory coverage, and procedural content into explicit review checks."}`;
+  return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). ${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. ${quickWinCount} quick win group(s) and ${materialChangeCount} material change group(s) are visible. ${levelReviewCount ? `${levelReviewCount} document(s) show possible policy-versus-standard-versus-procedure level issues and should be corrected before consolidation.` : "The current prototype still groups at the document level, but the requirement inventory is now available for the next mapping phase."}`;
 }
 
 function buildLevelMarkup(documents) {
@@ -1262,6 +1264,46 @@ function buildLevelMarkup(documents) {
       </ul>
     </article>
   `;
+}
+
+function buildRequirementInventoryMarkup(documents) {
+  if (!documents.length) {
+    return `<article class="result-card"><p>No requirement inventory is available yet.</p></article>`;
+  }
+
+  return documents
+    .map((document) => `
+      <article class="result-card">
+        <div class="result-card__header result-card__header--tight">
+          <div>
+            <h4>${document.title}</h4>
+            <p class="result-card__meta">${document.requirementCount} extracted requirement${document.requirementCount === 1 ? "" : "s"}</p>
+          </div>
+          <div class="result-card__badges">
+            <span class="doc-badge">${document.documentLevel.inferredType}</span>
+            <span class="doc-badge ${document.documentLevel.levelFit === "aligned" ? "doc-badge--ok" : "doc-badge--warn"}">
+              ${document.documentLevel.levelFit}
+            </span>
+          </div>
+        </div>
+        ${document.documentLevel.levelIssues.length ? `<p class="document-note">${document.documentLevel.levelIssues.join("; ")}</p>` : ""}
+        <ul class="requirement-list">
+          ${document.requirements.map((requirement) => `
+            <li class="requirement-row">
+              <div class="requirement-row__main">
+                <strong>R${requirement.sourceLocation.paragraphIndex}.${requirement.sourceLocation.itemIndex}</strong>
+                <p>${requirement.requirementText}</p>
+                <span>${requirement.sourceLocation.section || "Document body"}</span>
+              </div>
+              <div class="requirement-row__meta">
+                <span class="doc-badge">${requirement.requirementType}</span>
+              </div>
+            </li>
+          `).join("")}
+        </ul>
+      </article>
+    `)
+    .join("");
 }
 
 function buildGroupMarkup(result, groups) {
@@ -1608,6 +1650,7 @@ export function buildCsvExport(payload) {
     [
       "title",
       "source",
+      "requirement_count",
       "inferred_type",
       "auto_inferred_type",
       "override_type",
@@ -1624,6 +1667,7 @@ export function buildCsvExport(payload) {
     rows.push([
       document.title,
       document.source,
+      String(document.requirementCount || 0),
       document.documentLevel.inferredType,
       document.documentLevel.autoInferredType || document.documentLevel.inferredType,
       document.documentLevel.overrideType || "",
@@ -1662,6 +1706,7 @@ export function buildMarkdownExport(payload) {
     `- Quick win groups: ${quickWins.length}`,
     `- Material change groups: ${materialChanges.length}`,
     `- Visible documents: ${payload.filtered.documents.length}`,
+    `- Extracted requirements: ${payload.filtered.documents.reduce((sum, document) => sum + (document.requirementCount || 0), 0)}`,
     `- Visible similarity pairs: ${payload.filtered.edges.length}`,
     `- Visible import issues: ${payload.filtered.issues.length}`,
     "",
@@ -1726,6 +1771,29 @@ export function buildMarkdownExport(payload) {
       lines.push(`- Canonical candidate: ${document.canonicalTitle || "None"}`);
       lines.push(`- Review needed: ${document.needsReview ? "Yes" : "No"}`);
       lines.push(`- Level issues: ${document.documentLevel.levelIssues.join("; ") || "None"}`);
+      lines.push("");
+    });
+  }
+
+  lines.push("## Requirement Inventory", "");
+
+  if (!payload.filtered.documents.length) {
+    lines.push("No requirement inventory is visible in the current view.", "");
+  } else {
+    payload.filtered.documents.forEach((document) => {
+      lines.push(`### ${document.title}`);
+      lines.push("");
+      lines.push(`- Requirement count: ${document.requirementCount || 0}`);
+      if (!document.requirements?.length) {
+        lines.push("- No extracted requirements");
+        lines.push("");
+        return;
+      }
+      document.requirements.forEach((requirement) => {
+        lines.push(
+          `- [${requirement.sourceLocation.section || "Document body"} | P${requirement.sourceLocation.paragraphIndex}.${requirement.sourceLocation.itemIndex}] ${requirement.requirementText} (${requirement.requirementType})`
+        );
+      });
       lines.push("");
     });
   }

@@ -27,10 +27,11 @@ test("buildCsvExport includes current filtered document review fields", () => {
   const payload = buildExportPayload(result, [], "", "all", 0.05);
   const csv = buildCsvExport(payload);
 
-  assert.match(csv, /title,source,inferred_type,auto_inferred_type,override_type,level_fit/);
+  assert.match(csv, /title,source,requirement_count,inferred_type,auto_inferred_type,override_type,level_fit/);
   assert.match(csv, /recommendation_bucket/);
   assert.match(csv, /Records Retention Procedure/);
   assert.match(csv, /policy,procedure,policy/);
+  assert.match(csv, /,1,policy/);
   assert.match(csv, /material-change/);
 });
 
@@ -60,5 +61,6 @@ test("buildMarkdownExport summarizes the current visible analysis view", () => {
   assert.match(markdown, /## Quick Wins/);
   assert.match(markdown, /## Material Changes/);
   assert.match(markdown, /## Document Review Surface/);
+  assert.match(markdown, /## Requirement Inventory/);
   assert.match(markdown, /sample import issue/);
 });

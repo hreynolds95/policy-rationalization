@@ -933,6 +933,7 @@ button:hover,
 
 .source-list,
 .document-list,
+.requirement-list,
 .pair-list,
 .issue-list {
   display: grid;
@@ -955,6 +956,32 @@ button:hover,
 .source-list li {
   display: grid;
   gap: 4px;
+}
+
+.requirement-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.requirement-row__main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.requirement-row__main p {
+  margin: 0;
+  color: var(--accent-2);
+  line-height: 1.45;
+}
+
+.requirement-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .document-row {
