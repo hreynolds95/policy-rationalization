@@ -993,18 +993,20 @@ function renderProgressHeader() {
       <nav class="wizard-route-list" aria-label="Wizard progress">
         ${WIZARD_ROUTES.map((route, index) => {
           const stateLabel = routeStates[route.id];
-          const disabled = stateLabel === "locked" || state.isBusy;
+          const isCurrent = stateLabel === "current";
+          const disabled = stateLabel === "locked" || state.isBusy || isCurrent;
           return `
             <button
               class="wizard-route wizard-route--${stateLabel}"
               type="button"
               data-route="${route.id}"
+              ${isCurrent ? 'data-current-route="true" aria-current="step"' : ""}
               ${disabled ? "disabled" : ""}
             >
               <span class="wizard-route__number">${index + 1}</span>
               <span class="wizard-route__text">
                 <strong>${route.title}</strong>
-                <span>${stateLabel === "locked" ? "Locked" : stateLabel === "complete" ? "Done" : stateLabel === "upcoming" ? "Up next" : route.step}</span>
+                <span>${stateLabel === "locked" ? "Locked" : stateLabel === "complete" ? "Done" : stateLabel === "upcoming" ? "Up next" : "Current"}</span>
               </span>
             </button>
           `;

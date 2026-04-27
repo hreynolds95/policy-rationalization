@@ -1427,6 +1427,10 @@ button:hover,
   cursor: not-allowed;
 }
 
+.wizard-route[data-current-route="true"]:disabled {
+  cursor: default;
+}
+
 .wizard-route__number {
   width: 26px;
   height: 26px;
