@@ -10,7 +10,7 @@ import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:00 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:07 PM EDT";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
@@ -1460,6 +1460,40 @@ function buildInlineDiffHtml(segments) {
     .join("");
 }
 
+function buildLegacyPreservingRedlineHtml(segments) {
+  const parts = [];
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+
+    if (segment.type === "equal") {
+      parts.push(`<span class="legacy-token">${escapeHtml(segment.text)}</span>`);
+      continue;
+    }
+
+    if (segment.type === "remove") {
+      const next = segments[index + 1];
+      const hasReplacement = next?.type === "add";
+      parts.push(`<span class="legacy-token">${escapeHtml(segment.text)}</span>`);
+      if (hasReplacement) {
+        parts.push(
+          `<span class="suggestion-chip">[proposed replace with: ${escapeHtml(next.text)}]</span>`
+        );
+        index += 1;
+      } else {
+        parts.push(`<span class="suggestion-chip">[proposed remove]</span>`);
+      }
+      continue;
+    }
+
+    if (segment.type === "add") {
+      parts.push(`<span class="suggestion-chip">[proposed add: ${escapeHtml(segment.text)}]</span>`);
+    }
+  }
+
+  return parts.join("");
+}
+
 function buildSideBySideDiffHtml(rows) {
   return `
     <div class="redline-side-table">
@@ -1512,7 +1546,9 @@ function buildRequirementRedlineMarkup(result, group) {
             <p>${escapeHtml(model.proposedText)}</p>
           </div>
         </div>
-        <div class="redline-inline-box">${buildInlineDiffHtml(model.compareResult.segments)}</div>
+        <div class="redline-inline-box">
+          ${buildLegacyPreservingRedlineHtml(model.compareResult.segments)}
+        </div>
         ${buildSideBySideDiffHtml(model.compareResult.side_by_side)}
       </div>
     </details>
@@ -1931,7 +1967,6 @@ function buildRedlineSectionHtml(result, group, index) {
   const checksText = Object.entries(group.checks)
     .map(([label, value]) => `${formatLabel(label)} = ${Array.isArray(value) ? value.join("; ") : value}`)
     .join("; ");
-  const inlineHtml = buildInlineDiffHtml(redline.compareResult.segments);
   const sideBySideHtml = redline.compareResult.side_by_side
     .map(
       (row) => `
@@ -1980,8 +2015,8 @@ function buildRedlineSectionHtml(result, group, index) {
           <p>${escapeHtml(redline.proposedText)}</p>
         </article>
       </div>
-      <h3>Inline redline</h3>
-      <div class="inline-box">${inlineHtml}</div>
+      <h3>Legacy-preserving redline</h3>
+      <div class="inline-box">${buildLegacyPreservingRedlineHtml(redline.compareResult.segments)}</div>
       <h3>Side-by-side diff</h3>
       <table>
         <thead>
@@ -2107,14 +2142,14 @@ export function buildConsolidatedRedlineReportHtml(payload) {
       border-radius: 10px;
       white-space: pre-wrap;
     }
-    .redline-token--add {
-      background: rgba(163, 215, 149, 0.12);
-      color: #dcf3d5;
+    .legacy-token {
+      color: var(--ink);
     }
-    .redline-token--remove {
-      background: rgba(255, 141, 141, 0.12);
+    .suggestion-chip {
       color: #ffbcbc;
-      text-decoration: line-through;
+      background: rgba(255, 141, 141, 0.12);
+      border-radius: 6px;
+      padding: 1px 4px;
     }
     table {
       width: 100%;

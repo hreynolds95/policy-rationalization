@@ -159,7 +159,8 @@ test("buildConsolidatedRedlineReportHtml renders grouped requirement redlines", 
   assert.match(html, /Requirement Group 1/);
   assert.match(html, /Current canonical text/);
   assert.match(html, /Proposed consolidated text/);
-  assert.match(html, /Inline redline/);
+  assert.match(html, /Legacy-preserving redline/);
+  assert.match(html, /proposed replace with|proposed add|proposed remove/);
   assert.match(html, /Side-by-side diff/);
   assert.match(html, /Mapped requirements/);
 });

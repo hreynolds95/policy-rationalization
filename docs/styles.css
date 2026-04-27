@@ -942,6 +942,18 @@ button:hover,
   white-space: pre-wrap;
 }
 
+.legacy-token {
+  color: var(--ink);
+}
+
+.suggestion-chip {
+  display: inline;
+  color: #ffb2b2;
+  background: rgba(255, 107, 107, 0.14);
+  border-radius: 6px;
+  padding: 1px 4px;
+}
+
 .redline-token--add {
   background: rgba(255, 107, 107, 0.18);
   color: #ffc7c7;
