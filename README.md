@@ -1,24 +1,35 @@
 # Compliance Rationalizer
 
-Compliance Rationalizer helps review a policy and standards library for duplication, consolidation opportunities, and policy-level review flags before edits are made.
+Compliance Rationalizer is moving from a document-level prototype to a requirement-level rationalization workflow.
+
+The target end state is:
+
+- requirement-by-requirement mapping
+- 1:1 requirement coverage across candidate source documents
+- deduplication and consolidation at the requirement level
+- redlined consolidation output rather than document-group summaries
 
 ## Primary experience
 
 The deployable app now lives in [`docs/`](/Users/hreynolds/Documents/Rationalization/docs). It is a static GitHub Pages site, so it can be shared without the local Python server.
 
-What the Pages app supports:
+What the current Pages app supports:
 - Built-in sample library for demos and stakeholder walkthroughs
 - Public URL imports for CORS-friendly `.txt`, `.md`, `.html`, or exported Google Docs/Sheets links
 - File uploads for `.txt`, `.md`, `.markdown`, and `.csv`
 - Manual paste mode for ad hoc side-by-side comparisons
 - Browser-side duplicate grouping and consolidation recommendations
 
-What the analysis checks:
+What the current prototype analyzes:
 - Preserve required structure and required language
 - Keep roles and responsibilities materially consistent, including CPC and CCO references
 - Flag missing brand scope coverage
 - Flag missing regulatory language coverage
 - Flag procedural content that belongs in standards or procedures rather than policies
+
+The requirement-level target architecture is documented in:
+
+- [docs/requirement-level-rationalization-plan.md](/Users/hreynolds/Documents/Rationalization/docs/requirement-level-rationalization-plan.md)
 
 ## GitHub Pages deployment
 
