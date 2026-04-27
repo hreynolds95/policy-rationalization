@@ -58,10 +58,15 @@
         </section>
 
         <section class="actions">
-          <button id="load-sample" type="button" class="ghost">Try Sample Compare</button>
-          <button id="compare-btn" type="button" class="primary">Compare</button>
-          <button id="download-html" type="button" class="secondary" disabled>Download HTML Report</button>
-          <button id="download-pdf" type="button" class="secondary" disabled>Download PDF Report</button>
+          <div class="actions-main">
+            <button id="compare-btn" type="button" class="primary">Compare</button>
+            <button id="load-sample" type="button" class="secondary sample-btn">Try Sample Compare</button>
+          </div>
+          <div id="export-actions" class="export-actions hidden">
+            <span class="export-label">Export</span>
+            <button id="download-html" type="button" class="export-btn" disabled>HTML</button>
+            <button id="download-pdf" type="button" class="export-btn" disabled>PDF</button>
+          </div>
         </section>
 
         <div id="status" class="status"></div>

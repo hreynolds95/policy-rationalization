@@ -9,6 +9,7 @@ const compareBtn = document.getElementById('compare-btn');
 const loadSampleBtn = document.getElementById('load-sample');
 const downloadHtmlBtn = document.getElementById('download-html');
 const downloadPdfBtn = document.getElementById('download-pdf');
+const exportActionsEl = document.getElementById('export-actions');
 const statusEl = document.getElementById('status');
 const resultsEl = document.getElementById('results');
 const summaryListEl = document.getElementById('summary-list');
@@ -40,6 +41,12 @@ function setStatus(message, isError = false) {
   statusEl.className = `status ${isError ? 'error' : 'ok'}`;
 }
 
+function setExportEnabled(enabled) {
+  downloadHtmlBtn.disabled = !enabled;
+  downloadPdfBtn.disabled = !enabled;
+  exportActionsEl?.classList.toggle('hidden', !enabled);
+}
+
 function setMode(mode) {
   activeMode = mode;
   modeButtons.forEach((btn) => {
@@ -52,6 +59,7 @@ function setMode(mode) {
 
 modeButtons.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
 setMode(activeMode);
+setExportEnabled(false);
 
 function tokenizeWords(text) {
   return text.match(/\s+|[^\s]+/g) || [];
@@ -705,6 +713,7 @@ function downloadPdfReport() {
 compareBtn.addEventListener('click', async () => {
   setStatus('Comparing...');
   resultsEl.classList.add('hidden');
+  setExportEnabled(false);
 
   try {
     const { textA, textB, source } = await getInputsByMode();
@@ -715,11 +724,11 @@ compareBtn.addEventListener('click', async () => {
     renderInlineDiff(result.segments);
     renderSideBySide(result.side_by_side);
 
-    downloadHtmlBtn.disabled = false;
-    downloadPdfBtn.disabled = false;
+    setExportEnabled(true);
     resultsEl.classList.remove('hidden');
     setStatus('Comparison complete.');
   } catch (error) {
+    setExportEnabled(false);
     setStatus(error.message || 'Comparison failed.', true);
   }
 });
