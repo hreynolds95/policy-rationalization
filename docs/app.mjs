@@ -10,7 +10,7 @@ import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:37 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:43 PM EDT";
 const GROUP_DECISION_OPTIONS = [
   { value: "accept", label: "Accept" },
   { value: "revise", label: "Revise" },
@@ -905,6 +905,7 @@ function buildGroupsStepMarkup() {
           <div class="toggle-group" data-filter-group>
             ${buildFilterButton("all", "All", state.analysisView.filter)}
             ${buildFilterButton("undecided", "Undecided", state.analysisView.filter)}
+            ${buildFilterButton("completed", "Completed", state.analysisView.filter)}
             ${buildFilterButton("level", "Hierarchy review", state.analysisView.filter)}
             ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
             ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
@@ -948,6 +949,7 @@ function buildDetailsStepMarkup() {
           <div class="toggle-group" data-filter-group>
             ${buildFilterButton("all", "All", state.analysisView.filter)}
             ${buildFilterButton("undecided", "Undecided", state.analysisView.filter)}
+            ${buildFilterButton("completed", "Completed", state.analysisView.filter)}
             ${buildFilterButton("level", "Hierarchy review", state.analysisView.filter)}
             ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
             ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
@@ -987,6 +989,7 @@ function buildExportStepMarkup() {
   const viewLabels = {
     all: "All results",
     undecided: "Undecided groups",
+    completed: "Completed groups",
     level: "Hierarchy review",
     review: "Conflict flags",
     ready: "Clean mappings",
@@ -1962,6 +1965,9 @@ function filterAnalysisView(result, issues, rawQuery, filter, groupDecisions = s
     if (filter === "undecided") {
       return !hasGroupDecision(group, groupDecisions);
     }
+    if (filter === "completed") {
+      return hasGroupDecision(group, groupDecisions);
+    }
     if (filter === "level") {
       return (
         group.checks.hierarchyReviewStatus === "review-needed" ||
@@ -2000,6 +2006,17 @@ function filterAnalysisView(result, issues, rawQuery, filter, groupDecisions = s
         });
       });
     }
+    if (filter === "completed") {
+      return result.requirementGroups.some((group) => {
+        if (!hasGroupDecision(group, groupDecisions)) {
+          return false;
+        }
+        return group.requirementIds.some((requirementId) => {
+          const requirement = result.requirements.find((candidate) => candidate.requirementId === requirementId);
+          return requirement?.documentId === document.id;
+        });
+      });
+    }
     if (filter === "level") {
       return document.needsReview || document.documentLevel.levelFit !== "aligned";
     }
@@ -2028,6 +2045,11 @@ function filterAnalysisView(result, issues, rawQuery, filter, groupDecisions = s
     if (filter === "undecided") {
       return result.requirementGroups.some(
         (group) => !hasGroupDecision(group, groupDecisions) && group.requirementIds.includes(requirement.requirementId)
+      );
+    }
+    if (filter === "completed") {
+      return result.requirementGroups.some(
+        (group) => hasGroupDecision(group, groupDecisions) && group.requirementIds.includes(requirement.requirementId)
       );
     }
     if (filter === "level") {
