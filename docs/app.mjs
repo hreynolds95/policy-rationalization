@@ -851,32 +851,29 @@ function buildDetailsStepMarkup() {
       ${buildStepHero("details")}
       ${buildAnalysisSummaryMarkup()}
       <section class="panel table-panel">
-        <div class="analysis-controls">
-          <div class="search-header">
-            <h3>Detail explorer</h3>
-            <div class="search-bar">
-              <input
-                type="text"
-                id="analysisSearch"
-                placeholder="Search titles, sources, canonical candidates, or recommendations..."
-                autocomplete="off"
-                value="${escapeHtml(state.analysisView.query)}"
-              >
-              <span class="search-count">${filtered.documents.length} docs / ${filtered.edges.length} pairs</span>
-            </div>
+        <div class="review-toolbar">
+          <div class="search-bar review-toolbar__search">
+            <input
+              type="text"
+              id="analysisSearch"
+              placeholder="Search titles, sources, canonical candidates, or recommendations..."
+              autocomplete="off"
+              value="${escapeHtml(state.analysisView.query)}"
+            >
           </div>
-          <div class="filter-toolbar">
-            <div class="toggle-group" data-filter-group>
-              ${buildFilterButton("all", "All", state.analysisView.filter)}
-              ${buildFilterButton("level", "Level review", state.analysisView.filter)}
-              ${buildFilterButton("review", "Review flags", state.analysisView.filter)}
-              ${buildFilterButton("ready", "Cleaner fits", state.analysisView.filter)}
-              ${buildFilterButton("orphan", "Ungrouped docs", state.analysisView.filter)}
-            </div>
+          <span class="doc-badge">${filtered.documents.length} docs / ${filtered.edges.length} pairs</span>
+        </div>
+        <div class="filter-toolbar">
+          <div class="toggle-group" data-filter-group>
+            ${buildFilterButton("all", "All", state.analysisView.filter)}
+            ${buildFilterButton("level", "Level review", state.analysisView.filter)}
+            ${buildFilterButton("review", "Review flags", state.analysisView.filter)}
+            ${buildFilterButton("ready", "Cleaner fits", state.analysisView.filter)}
+            ${buildFilterButton("orphan", "Ungrouped docs", state.analysisView.filter)}
           </div>
         </div>
       </section>
-      <div class="wizard-grid wizard-grid--details">
+      <div class="review-stack">
         <section class="panel table-panel">
           <div class="step-card-header">
             <h3>Analyzed documents</h3>
