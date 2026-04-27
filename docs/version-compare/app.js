@@ -42,11 +42,16 @@ function setStatus(message, isError = false) {
 
 function setMode(mode) {
   activeMode = mode;
-  modeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.mode === mode));
+  modeButtons.forEach((btn) => {
+    const isActive = btn.dataset.mode === mode;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
   Object.entries(panels).forEach(([name, panel]) => panel.classList.toggle('hidden', name !== mode));
 }
 
 modeButtons.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+setMode(activeMode);
 
 function tokenizeWords(text) {
   return text.match(/\s+|[^\s]+/g) || [];
