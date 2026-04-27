@@ -10,7 +10,7 @@ import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:48 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:45 PM EDT";
 const GROUP_DECISION_OPTIONS = [
   { value: "accept", label: "Accept" },
   { value: "revise", label: "Revise" },
@@ -72,6 +72,9 @@ const state = {
   includeSampleData: false,
   activeSourceTab: "urls",
   isBusy: false,
+  ui: {
+    isChangeSummaryOpen: false,
+  },
   workspace: {
     urlsText: "",
     uploadedFiles: [],
@@ -178,6 +181,13 @@ function getHasAnalysis() {
   return Boolean(state.analysisView.result);
 }
 
+function normalizeComparableText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function ensureAccessibleRoute(routeId) {
   if (routeId === "sources") {
     return routeId;
@@ -193,6 +203,7 @@ function persistState() {
     route: state.route,
     includeSampleData: state.includeSampleData,
     activeSourceTab: state.activeSourceTab,
+    ui: state.ui,
     workspace: {
       urlsText: state.workspace.urlsText,
       uploadedFiles: state.workspace.uploadedFiles,
@@ -230,6 +241,7 @@ function restoreState() {
     state.route = ensureAccessibleRoute(parsed.route || "sources");
     state.includeSampleData = Boolean(parsed.includeSampleData);
     state.activeSourceTab = normalizeSourceTab(parsed.activeSourceTab);
+    state.ui.isChangeSummaryOpen = Boolean(parsed.ui?.isChangeSummaryOpen);
     state.workspace.urlsText = parsed.workspace?.urlsText || "";
     state.workspace.uploadedFiles = Array.isArray(parsed.workspace?.uploadedFiles)
       ? parsed.workspace.uploadedFiles.map((file) => ({
@@ -892,6 +904,7 @@ function buildGroupsStepMarkup() {
     state.analysisView.filter
   );
   const groupsHtml = buildRequirementGroupMarkup(state.analysisView.result, filtered.groups);
+  const changeSummaryCount = buildProposedChangeRecords(state.analysisView.result, filtered.groups).length;
   return `
     <section class="wizard-step-page">
       ${buildStepHero("groups")}
@@ -901,7 +914,7 @@ function buildGroupsStepMarkup() {
           <h3>Requirement mapping groups</h3>
           <p class="section-subtitle">Review cross-document requirement matches, 1:1 mapping conflicts, hierarchy watch-outs, and inline redline proposals.</p>
         </div>
-        <div class="filter-toolbar">
+        <div class="filter-toolbar filter-toolbar--between">
           <div class="toggle-group" data-filter-group>
             ${buildFilterButton("all", "All", state.analysisView.filter)}
             ${buildFilterButton("undecided", "Undecided", state.analysisView.filter)}
@@ -910,9 +923,15 @@ function buildGroupsStepMarkup() {
             ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
             ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
           </div>
+          <div class="control-row control-row--wrap">
+            <button class="ghost-button ghost-button--small" type="button" data-open-change-summary>
+              Change summary (${changeSummaryCount})
+            </button>
+          </div>
         </div>
         <div class="results-section">${groupsHtml}</div>
       </section>
+      ${buildChangeSummaryModalMarkup(state.analysisView.result, filtered.groups)}
       ${buildStepFooter("groups")}
     </section>
   `;
@@ -1015,6 +1034,7 @@ function buildExportStepMarkup() {
         ${buildDecisionSummaryBarMarkup(decisionSummary)}
         <div class="control-row">
           <button class="primary-button" type="button" data-export-format="redline">Export Redline Report</button>
+          <button class="primary-button" type="button" data-open-change-summary>Open Change Summary</button>
           <button class="primary-button" type="button" data-export-format="csv">Export CSV</button>
           <button class="ghost-button" type="button" data-export-format="md">Export Markdown</button>
         </div>
@@ -1027,6 +1047,7 @@ function buildExportStepMarkup() {
         </div>
         <div class="results-section">${issuesHtml}</div>
       </section>
+      ${buildChangeSummaryModalMarkup(state.analysisView.result, filtered.groups)}
     </section>
   `;
 }
@@ -1505,11 +1526,21 @@ export function buildRequirementRedlineModel(result, group) {
     updated_label: "Proposed consolidated requirement",
   });
 
+  const hasMeaningfulChange =
+    normalizeComparableText(primary.requirementText) !== normalizeComparableText(proposedText);
+
+  if (!hasMeaningfulChange && autoRedlineStatus !== "blocked") {
+    autoRedlineStatus = "advisory";
+    reviewNote =
+      "No textual change is proposed because the strongest in-scope wording is materially the same as the canonical requirement. This remains a consolidation and decision-tracking review.";
+  }
+
   return {
     primary,
     proposedText,
     compareResult,
     autoRedlineStatus,
+    hasMeaningfulChange,
     reviewNote,
     standaloneUrl: buildStandaloneRedlineUrl(primary.requirementText, proposedText),
   };
@@ -1585,6 +1616,98 @@ function buildSideBySideDiffHtml(rows) {
   `;
 }
 
+function splitDocumentBlocks(text) {
+  const blocks = String(text || "")
+    .split(/\n\s*\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  if (blocks.length) {
+    return blocks;
+  }
+
+  return String(text || "")
+    .split(/\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+}
+
+function injectHtmlIntoFirstMatch(sourceText, matchText, injectedHtml) {
+  const matchIndex = sourceText.indexOf(matchText);
+  if (matchIndex === -1) {
+    return "";
+  }
+  const before = sourceText.slice(0, matchIndex);
+  const after = sourceText.slice(matchIndex + matchText.length);
+  return `${escapeHtml(before)}${injectedHtml}${escapeHtml(after)}`;
+}
+
+function buildDocumentContextRedlineMarkup(result, model) {
+  const document = result.documents.find((candidate) => candidate.id === model.primary.documentId);
+  if (!document) {
+    return "";
+  }
+
+  const blocks = splitDocumentBlocks(document.text);
+  const targetIndex = Math.max(0, (model.primary.sourceLocation?.paragraphIndex || 1) - 1);
+  const targetBlock = blocks[targetIndex] || "";
+  const inlineRedlineHtml = buildLegacyPreservingRedlineHtml(model.compareResult.segments);
+  const renderedBlocks = blocks.map((block, index) => {
+    const isTarget = index === targetIndex;
+    if (!isTarget) {
+      return `
+        <article class="document-context-block">
+          <p>${escapeHtml(block)}</p>
+        </article>
+      `;
+    }
+
+    let contentHtml = escapeHtml(block);
+    let fallbackHtml = "";
+
+    if (model.hasMeaningfulChange) {
+      const injected = injectHtmlIntoFirstMatch(block, model.primary.requirementText, inlineRedlineHtml);
+      if (injected) {
+        contentHtml = injected;
+      } else {
+        fallbackHtml = `
+          <div class="document-context-fallback">
+            <p class="document-note">The exact requirement anchor could not be replaced inline in the original paragraph, so the proposed change is shown below the original text.</p>
+            <div class="redline-inline-box">${inlineRedlineHtml}</div>
+          </div>
+        `;
+      }
+    }
+
+    return `
+      <article class="document-context-block document-context-block--active">
+        <div class="document-context-block__meta">
+          <span class="doc-badge doc-badge--ok">Target paragraph</span>
+          <span class="result-card__meta">${escapeHtml(model.primary.sourceLocation?.section || "Document body")}</span>
+        </div>
+        <p>${contentHtml}</p>
+        ${
+          !model.hasMeaningfulChange
+            ? `<p class="document-note">No textual change is proposed in this paragraph. The original language remains unchanged.</p>`
+            : fallbackHtml
+        }
+      </article>
+    `;
+  });
+
+  return `
+    <section class="document-context-view">
+      <div class="document-context-view__header">
+        <h5>Canonical document with inline proposed change</h5>
+        <p class="document-note">${escapeHtml(document.title)} • ${pluralize(blocks.length, "content block")}</p>
+      </div>
+      <div class="document-context-stack">
+        ${renderedBlocks.join("")}
+      </div>
+    </section>
+  `;
+}
+
 function buildRequirementRedlineMarkup(result, group) {
   const model = buildRequirementRedlineModel(result, group);
   if (!model) {
@@ -1598,7 +1721,13 @@ function buildRequirementRedlineMarkup(result, group) {
       <div class="redline-preview">
         <div class="redline-preview__meta">
           <span class="doc-badge ${model.autoRedlineStatus === "ready" ? "doc-badge--ok" : "doc-badge--warn"}">
-            ${model.autoRedlineStatus === "ready" ? "Auto redline ready" : model.autoRedlineStatus === "caution" ? "Advisory redline" : "Auto redline blocked"}
+            ${
+              model.autoRedlineStatus === "ready"
+                ? "Auto redline ready"
+                : model.autoRedlineStatus === "caution" || model.autoRedlineStatus === "advisory"
+                  ? "Advisory redline"
+                  : "Auto redline blocked"
+            }
           </span>
           <span class="doc-badge">Added ${summary.added_words}</span>
           <span class="doc-badge">Removed ${summary.removed_words}</span>
@@ -1615,12 +1744,87 @@ function buildRequirementRedlineMarkup(result, group) {
             <p>${escapeHtml(model.proposedText)}</p>
           </div>
         </div>
-        <div class="redline-inline-box">
-          ${buildLegacyPreservingRedlineHtml(model.compareResult.segments)}
-        </div>
+        ${buildDocumentContextRedlineMarkup(result, model)}
         ${buildSideBySideDiffHtml(model.compareResult.side_by_side)}
       </div>
     </details>
+  `;
+}
+
+function buildProposedChangeRecords(result, groups, groupDecisions = state.analysisView.groupDecisions) {
+  return groups
+    .map((group, index) => {
+      const redline = buildRequirementRedlineModel(result, group);
+      if (!redline || !redline.hasMeaningfulChange) {
+        return null;
+      }
+      const decision = groupDecisions[getRequirementGroupKey(group)] || {};
+      return {
+        group,
+        redline,
+        index,
+        decision,
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildChangeSummaryModalMarkup(result, groups) {
+  if (!state.ui.isChangeSummaryOpen) {
+    return "";
+  }
+
+  const records = buildProposedChangeRecords(result, groups);
+  const itemsHtml = records.length
+    ? records
+        .map(({ group, redline, index, decision }) => `
+          <article class="change-summary-item">
+            <div class="change-summary-item__header">
+              <div>
+                <p class="eyebrow">Requirement Group ${index + 1}</p>
+                <h4>${escapeHtml(redline.primary.sourceDocumentTitle)}</h4>
+              </div>
+              <div class="result-card__badges">
+                <span class="doc-badge ${group.recommendationBucket === "quick-win" ? "doc-badge--ok" : "doc-badge--warn"}">${escapeHtml(group.recommendationBucket)}</span>
+                <span class="doc-badge">${escapeHtml(decision.decision || "Undecided")}</span>
+              </div>
+            </div>
+            <p class="document-note">${escapeHtml(redline.primary.sourceLocation?.section || "Document body")}</p>
+            <div class="change-summary-item__grid">
+              <div class="redline-copy-card">
+                <h5>Current text</h5>
+                <p>${escapeHtml(redline.primary.requirementText)}</p>
+              </div>
+              <div class="redline-copy-card">
+                <h5>Proposed text</h5>
+                <p>${escapeHtml(redline.proposedText)}</p>
+              </div>
+            </div>
+            <p class="document-note"><strong>Decision:</strong> ${escapeHtml(decision.decision || "None")} ${decision.note ? `• ${escapeHtml(decision.note)}` : ""}</p>
+          </article>
+        `)
+        .join("")
+    : `<article class="change-summary-empty"><p>No proposed text changes are visible in the current filter. Groups with unchanged canonical wording are excluded from this summary.</p></article>`;
+
+  return `
+    <div class="modal-shell" data-close-change-summary>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="changeSummaryTitle" onclick="event.stopPropagation()">
+        <div class="modal-card__header">
+          <div>
+            <p class="eyebrow">Change summary</p>
+            <h3 id="changeSummaryTitle">Proposed edits only</h3>
+            <p class="section-subtitle">This summary lists only requirement groups with a real text change, plus the current reviewer decision for each one.</p>
+          </div>
+          <div class="control-row">
+            <button class="ghost-button ghost-button--small" type="button" data-download-change-summary>Download summary</button>
+            <button class="ghost-button ghost-button--small" type="button" data-close-change-summary-button>Close</button>
+          </div>
+        </div>
+        <div class="modal-card__body">
+          ${itemsHtml}
+        </div>
+      </section>
+    </div>
   `;
 }
 
@@ -2200,8 +2404,8 @@ function buildRedlineSectionHtml(result, group, index, groupDecisions = {}) {
           <p>${escapeHtml(redline.proposedText)}</p>
         </article>
       </div>
-      <h3>Legacy-preserving redline</h3>
-      <div class="inline-box">${buildLegacyPreservingRedlineHtml(redline.compareResult.segments)}</div>
+      <h3>Full document redline context</h3>
+      ${buildDocumentContextRedlineReportHtml(result, redline)}
       <h3>Side-by-side diff</h3>
       <table>
         <thead>
@@ -2212,6 +2416,46 @@ function buildRedlineSectionHtml(result, group, index, groupDecisions = {}) {
       <h3>Mapped requirements</h3>
       <ul class="requirement-items">${requirementItems}</ul>
     </section>
+  `;
+}
+
+function buildDocumentContextRedlineReportHtml(result, redline) {
+  const document = result.documents.find((candidate) => candidate.id === redline.primary.documentId);
+  if (!document) {
+    return "";
+  }
+  const blocks = splitDocumentBlocks(document.text);
+  const targetIndex = Math.max(0, (redline.primary.sourceLocation?.paragraphIndex || 1) - 1);
+  const inlineRedlineHtml = buildLegacyPreservingRedlineHtml(redline.compareResult.segments);
+
+  const blocksHtml = blocks
+    .map((block, index) => {
+      if (index !== targetIndex) {
+        return `<article class="context-block"><p>${escapeHtml(block)}</p></article>`;
+      }
+
+      const injected = redline.hasMeaningfulChange
+        ? injectHtmlIntoFirstMatch(block, redline.primary.requirementText, inlineRedlineHtml)
+        : "";
+      const paragraphHtml = injected || escapeHtml(block);
+      return `
+        <article class="context-block context-block--active">
+          <p>${paragraphHtml}</p>
+          ${
+            redline.hasMeaningfulChange || injected
+              ? ""
+              : `<div class="inline-box">${inlineRedlineHtml}</div>`
+          }
+        </article>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="context-view">
+      <p class="helper"><strong>Canonical document:</strong> ${escapeHtml(document.title)}</p>
+      <div class="context-stack">${blocksHtml}</div>
+    </div>
   `;
 }
 
@@ -2328,6 +2572,29 @@ export function buildConsolidatedRedlineReportHtml(payload) {
       border-radius: 10px;
       white-space: pre-wrap;
     }
+    .context-view {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .context-stack {
+      display: grid;
+      gap: 8px;
+    }
+    .context-block {
+      padding: 12px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+    .context-block--active {
+      background: rgba(124, 172, 255, 0.08);
+      border-color: rgba(124, 172, 255, 0.35);
+    }
+    .context-block p {
+      margin: 0;
+      white-space: pre-wrap;
+    }
     .legacy-token {
       color: var(--ink);
     }
@@ -2424,6 +2691,83 @@ export function buildConsolidatedRedlineReportHtml(payload) {
       </div>
     </section>
     ${sections || `<section class="group-card"><h2>No visible requirement groups</h2><p class="helper">The current filter did not surface any mapped requirement groups to redline.</p></section>`}
+  </main>
+</body>
+</html>`;
+}
+
+export function buildChangeSummaryReportHtml(payload) {
+  const records = buildProposedChangeRecords(payload.sourceResult, payload.filtered.groups, payload.groupDecisions);
+  const items = records
+    .map(({ group, redline, index, decision }) => `
+      <section class="group-card">
+        <div class="group-card__header">
+          <div>
+            <p class="eyebrow">Requirement Group ${index + 1}</p>
+            <h2>${escapeHtml(redline.primary.sourceDocumentTitle)}</h2>
+          </div>
+          <div class="badge-row">
+            <span class="badge">${escapeHtml(group.recommendationBucket)}</span>
+            <span class="badge">${escapeHtml(decision.decision || "undecided")}</span>
+          </div>
+        </div>
+        <p class="helper"><strong>Section:</strong> ${escapeHtml(redline.primary.sourceLocation?.section || "Document body")}</p>
+        <p class="helper"><strong>Reviewer note:</strong> ${escapeHtml(decision.note || "None")}</p>
+        <div class="copy-grid">
+          <article class="copy-card">
+            <h3>Current text</h3>
+            <p>${escapeHtml(redline.primary.requirementText)}</p>
+          </article>
+          <article class="copy-card">
+            <h3>Proposed text</h3>
+            <p>${escapeHtml(redline.proposedText)}</p>
+          </article>
+        </div>
+      </section>
+    `)
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Policy Rationalization Change Summary</title>
+  <style>
+    :root {
+      --bg: #1f2228;
+      --card: #2f343b;
+      --panel: #16181d;
+      --line: #464b54;
+      --ink: #ffffff;
+      --muted: #bcc3ca;
+      --accent: #7cacff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Cash Sans", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--ink); }
+    main { width: min(1080px, 94vw); margin: 0 auto; padding: 24px 0 40px; }
+    .hero, .group-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+    .group-card { margin-top: 14px; }
+    .eyebrow { margin: 0 0 8px; color: var(--muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+    .helper { color: var(--muted); margin: 8px 0 0; }
+    .group-card__header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .badge-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .badge { display: inline-flex; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--accent); background: rgba(124, 172, 255, 0.12); font-size: 0.74rem; font-weight: 700; }
+    .copy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .copy-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+    .copy-card h3 { margin: 0 0 8px; }
+    @media (max-width: 720px) { .copy-grid { grid-template-columns: 1fr; } .group-card__header { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Policy Rationalization</p>
+      <h1>Change Summary</h1>
+      <p class="helper">This export lists only requirement groups with a substantive proposed text change, alongside the current reviewer decision.</p>
+      <p class="helper">Generated: ${escapeHtml(payload.createdAt)} • Filter: ${escapeHtml(payload.filter)} • Search: ${escapeHtml(payload.query || "None")}</p>
+    </section>
+    ${items || `<section class="group-card"><h2>No proposed text changes</h2><p class="helper">The current filter does not contain any requirement groups with a substantive text change.</p></section>`}
   </main>
 </body>
 </html>`;
@@ -2737,6 +3081,16 @@ function exportCurrentView(format) {
     return;
   }
 
+  if (format === "change-summary") {
+    downloadTextFile(
+      `policy-rationalization-change-summary-${dateLabel}-${filterLabel}.html`,
+      buildChangeSummaryReportHtml(payload),
+      "text/html;charset=utf-8"
+    );
+    renderStatus("Exported proposed change summary for the current filtered view.", "success");
+    return;
+  }
+
   downloadTextFile(
     `policy-rationalization-${dateLabel}-${filterLabel}.md`,
     buildMarkdownExport(payload),
@@ -2987,6 +3341,28 @@ function updateGroupDecision(groupKey, patch) {
 }
 
 function wireStepEvents(scope) {
+  scope.querySelectorAll("[data-open-change-summary]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.ui.isChangeSummaryOpen = true;
+      persistState();
+      renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-close-change-summary], [data-close-change-summary-button]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.ui.isChangeSummaryOpen = false;
+      persistState();
+      renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-download-change-summary]").forEach((button) => {
+    button.addEventListener("click", () => {
+      exportCurrentView("change-summary");
+    });
+  });
+
   scope.querySelectorAll("[data-scroll-current]").forEach((button) => {
     button.addEventListener("click", () => {
       if (state.route === "sources" && isSourcesWorkspaceEmpty()) {

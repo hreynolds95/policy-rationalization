@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { analyzeDocuments } from "../docs/analysis.mjs";
 import {
   buildConsolidatedRedlineReportHtml,
+  buildChangeSummaryReportHtml,
   buildCsvExport,
   buildExportPayload,
   buildMarkdownExport,
@@ -263,6 +264,32 @@ test("buildRequirementRedlineModel distinguishes ready and blocked redlines", ()
   assert.equal(blockedRedline.autoRedlineStatus, "blocked");
 });
 
+test("buildRequirementRedlineModel marks no-op wording as advisory without a meaningful change", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Brand Scope Policy",
+        source: "manual://a",
+        text: "Scope\n\nThis policy applies to all brands and subsidiaries.",
+      },
+      {
+        id: "b",
+        title: "Brand Scope Policy Copy",
+        source: "manual://b",
+        text: "Scope\n\nThis policy applies to all brands and subsidiaries.",
+      },
+    ],
+    0.2
+  );
+
+  const group = result.requirementGroups[0];
+  const redline = buildRequirementRedlineModel(result, group);
+
+  assert.equal(redline.hasMeaningfulChange, false);
+  assert.equal(redline.autoRedlineStatus, "advisory");
+});
+
 test("buildConsolidatedRedlineReportHtml renders grouped requirement redlines", () => {
   const result = analyzeDocuments(
     [
@@ -301,8 +328,63 @@ test("buildConsolidatedRedlineReportHtml renders grouped requirement redlines", 
   assert.match(html, /Requirement Group 1/);
   assert.match(html, /Current canonical text/);
   assert.match(html, /Proposed consolidated text/);
-  assert.match(html, /Legacy-preserving redline/);
-  assert.match(html, /proposed replace with|proposed add|proposed remove/);
+  assert.match(html, /Full document redline context/);
+  assert.match(html, /Retention Requirements/);
+  assert.match(html, /Records must be retained for seven years\./);
   assert.match(html, /Side-by-side diff/);
   assert.match(html, /Mapped requirements/);
+});
+
+test("buildChangeSummaryReportHtml lists only substantive proposed changes with decisions", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Retention Policy",
+        source: "manual://a",
+        text: "Retention Requirements\n\nRecords must be retained for seven years.",
+      },
+      {
+        id: "b",
+        title: "Retention Policy Copy",
+        source: "manual://b",
+        text: "Retention Requirements\n\nRecords must be retained for seven years across all entities.",
+      },
+      {
+        id: "c",
+        title: "Scope Policy",
+        source: "manual://c",
+        text: "Scope\n\nThis policy applies to all brands and subsidiaries.",
+      },
+      {
+        id: "d",
+        title: "Scope Policy Copy",
+        source: "manual://d",
+        text: "Scope\n\nThis policy applies to all brands and subsidiaries.",
+      },
+    ],
+    0.2
+  );
+
+  const groupWithChange = result.requirementGroups.find((group) =>
+    group.requirementIds.some((id) => id.startsWith("a::"))
+  );
+  const changedKey = [...groupWithChange.requirementIds].sort().join("::");
+  const payload = buildExportPayload(result, [], "", "all", 0.2, {
+    groupDecisions: {
+      [changedKey]: {
+        decision: "revise",
+        note: "Retain cross-entity qualifier.",
+        updatedAt: "2026-04-27T22:20:00.000Z",
+      },
+    },
+  });
+
+  const html = buildChangeSummaryReportHtml(payload);
+
+  assert.match(html, /Change Summary/);
+  assert.match(html, /Retention Policy/);
+  assert.match(html, /Retain cross-entity qualifier/);
+  assert.match(html, /Records must be retained for seven years across all entities\./);
+  assert.doesNotMatch(html, /Scope Policy/);
 });
