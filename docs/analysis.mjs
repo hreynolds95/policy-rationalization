@@ -48,6 +48,11 @@ const REQUIREMENT_CUE_TERMS = [
   "workflow",
 ];
 const BULLET_PREFIX_RE = /^([-*•]|\d+[.)]|[a-zA-Z][.)])\s+/;
+const DOCUMENT_TYPE_RANK = {
+  policy: 0,
+  standard: 1,
+  procedure: 2,
+};
 
 export const DOCUMENT_TYPES = ["policy", "standard", "procedure"];
 
@@ -369,6 +374,45 @@ export function extractRequirementsFromDocument(document, documentLevelType = "p
   return requirements;
 }
 
+function evaluateRequirementHierarchy(requirement) {
+  const sourceType = requirement.sourceDocumentType || "policy";
+  const requirementType = requirement.requirementType;
+  const issues = [];
+  let alignment = "aligned";
+  let scopeStatus = sourceType === "procedure" ? "out-of-scope" : "in-scope";
+
+  if (sourceType === "policy") {
+    if (requirementType === "procedure-like content") {
+      alignment = "misaligned";
+      issues.push("policy requirement contains step-based procedural detail that should sit in a procedure");
+    } else if (requirementType === "standard-level requirement") {
+      alignment = "review";
+      issues.push("policy requirement may be carrying control or implementation detail better suited to a standard");
+    }
+  }
+
+  if (sourceType === "standard") {
+    if (requirementType === "procedure-like content") {
+      alignment = "review";
+      issues.push("standard requirement contains workflow detail that may belong in a procedure");
+    }
+  }
+
+  if (sourceType === "procedure") {
+    alignment = "review";
+    issues.push("procedure content is outside the in-scope document set for Policy Team review under the policy on policies");
+    if (requirementType === "policy-level requirement") {
+      issues.push("procedure appears to carry policy-level intent that should likely be elevated");
+    }
+  }
+
+  return {
+    alignment,
+    issues,
+    scopeStatus,
+  };
+}
+
 function evaluateConstraints(group, documentById) {
   const combined = group.documentIds.map((id) => documentById.get(id).text.toLowerCase()).join("\n");
   const proceduralTerms = ["procedure", "step 1", "workflow", "how to"];
@@ -506,6 +550,169 @@ export function buildDuplicateGroups(documents, edges) {
   );
 }
 
+export function computeRequirementSimilarityEdges(requirements, threshold = 0.45) {
+  const tokenizedRequirements = requirements.map((requirement) => tokenize(requirement.requirementText));
+  const idf = inverseDocumentFrequency(tokenizedRequirements);
+  const vectors = tokenizedRequirements.map((tokens) => vectorize(termFrequency(tokens), idf));
+  const edges = [];
+
+  for (let i = 0; i < requirements.length; i += 1) {
+    for (let j = i + 1; j < requirements.length; j += 1) {
+      if (requirements[i].documentId === requirements[j].documentId) {
+        continue;
+      }
+      const score = cosineSimilarity(vectors[i], vectors[j]);
+      if (score >= threshold) {
+        edges.push({
+          leftRequirementId: requirements[i].requirementId,
+          rightRequirementId: requirements[j].requirementId,
+          score: Number(score.toFixed(4)),
+        });
+      }
+    }
+  }
+
+  return edges.sort((left, right) => right.score - left.score);
+}
+
+function inferHierarchyRelationship(documentTypes) {
+  const types = new Set(documentTypes);
+  if (types.size === 1) {
+    return "same-level";
+  }
+  if (types.has("policy") && types.has("standard") && !types.has("procedure")) {
+    return "policy-to-standard";
+  }
+  if (types.has("standard") && types.has("procedure") && !types.has("policy")) {
+    return "standard-to-procedure";
+  }
+  if (types.has("policy") && types.has("procedure") && !types.has("standard")) {
+    return "policy-to-procedure-gap";
+  }
+  return "mixed-level";
+}
+
+function buildRequirementGroupRecommendation(group, requirementById, checks) {
+  const primary = requirementById.get(group.recommendedPrimaryRequirementId);
+  const others = group.requirementIds.filter((id) => id !== group.recommendedPrimaryRequirementId).map((id) => requirementById.get(id));
+  const blockers = [];
+
+  if (checks.oneToOneMappingStatus === "conflict") {
+    blockers.push("multiple requirements from the same source document map into this cluster");
+  }
+  if (checks.hierarchyRelationship === "policy-to-procedure-gap") {
+    blockers.push("policy and procedure content appear linked without an intermediate standard");
+  }
+  if (checks.hierarchyReviewStatus === "review-needed") {
+    blockers.push("one or more mapped requirements do not align cleanly with the document hierarchy");
+  }
+  if (checks.scopeStatus === "contains-out-of-scope") {
+    blockers.push("procedure content is present and should be reviewed as supporting material, not as an in-scope policy artifact");
+  }
+
+  const blockerSentence = blockers.length ? ` Watch-outs: ${blockers.join("; ")}.` : "";
+  return `Use the canonical requirement from ${primary.sourceDocumentTitle} as the starting point and reconcile ${others.length} overlapping requirement(s) into a 1:1 mapped requirement set.${blockerSentence}`;
+}
+
+export function buildRequirementGroups(requirements, edges) {
+  const dsu = new DisjointSet();
+  const edgeLookup = new Map();
+  const requirementById = new Map(requirements.map((requirement) => [requirement.requirementId, requirement]));
+
+  for (const requirement of requirements) {
+    dsu.find(requirement.requirementId);
+  }
+
+  for (const edge of edges) {
+    dsu.union(edge.leftRequirementId, edge.rightRequirementId);
+    edgeLookup.set([edge.leftRequirementId, edge.rightRequirementId].sort().join("::"), edge.score);
+  }
+
+  const components = new Map();
+  for (const requirement of requirements) {
+    const root = dsu.find(requirement.requirementId);
+    if (!components.has(root)) {
+      components.set(root, []);
+    }
+    components.get(root).push(requirement.requirementId);
+  }
+
+  const groups = [];
+  for (const ids of components.values()) {
+    if (ids.length < 2) {
+      continue;
+    }
+
+    const pairScores = [];
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const score = edgeLookup.get([ids[i], ids[j]].sort().join("::"));
+        if (typeof score === "number") {
+          pairScores.push(score);
+        }
+      }
+    }
+
+    const recommendedPrimaryRequirementId = [...ids].sort((left, right) => {
+      const leftRequirement = requirementById.get(left);
+      const rightRequirement = requirementById.get(right);
+      return (
+        (DOCUMENT_TYPE_RANK[leftRequirement.sourceDocumentType] ?? 99) -
+          (DOCUMENT_TYPE_RANK[rightRequirement.sourceDocumentType] ?? 99) ||
+        leftRequirement.requirementText.length - rightRequirement.requirementText.length ||
+        leftRequirement.sourceDocumentTitle.localeCompare(rightRequirement.sourceDocumentTitle)
+      );
+    })[0];
+
+    const groupedRequirements = ids.map((id) => requirementById.get(id));
+    const documentIds = groupedRequirements.map((requirement) => requirement.documentId);
+    const hierarchyIssues = groupedRequirements.flatMap((requirement) => requirement.hierarchyReview.issues);
+    const containsOutOfScope = groupedRequirements.some(
+      (requirement) => requirement.hierarchyReview.scopeStatus === "out-of-scope"
+    );
+    const hierarchyReviewStatus = groupedRequirements.some(
+      (requirement) => requirement.hierarchyReview.alignment !== "aligned"
+    )
+      ? "review-needed"
+      : "aligned";
+
+    const checks = {
+      oneToOneMappingStatus: new Set(documentIds).size === documentIds.length ? "clean" : "conflict",
+      hierarchyRelationship: inferHierarchyRelationship(groupedRequirements.map((requirement) => requirement.sourceDocumentType)),
+      hierarchyReviewStatus,
+      scopeStatus: containsOutOfScope ? "contains-out-of-scope" : "in-scope-only",
+      hierarchyIssues,
+    };
+
+    groups.push({
+      requirementIds: ids,
+      avgInternalSimilarity: Number(
+        (pairScores.reduce((sum, score) => sum + score, 0) / (pairScores.length || 1)).toFixed(4)
+      ),
+      recommendedPrimaryRequirementId,
+      checks,
+      recommendationBucket:
+        checks.oneToOneMappingStatus === "clean" &&
+        checks.hierarchyReviewStatus === "aligned" &&
+        checks.scopeStatus === "in-scope-only" &&
+        checks.hierarchyRelationship !== "policy-to-procedure-gap"
+          ? "quick-win"
+          : "material-change",
+      recommendation: buildRequirementGroupRecommendation(
+        { requirementIds: ids, recommendedPrimaryRequirementId },
+        requirementById,
+        checks
+      ),
+    });
+  }
+
+  return groups.sort(
+    (left, right) =>
+      right.avgInternalSimilarity - left.avgInternalSimilarity ||
+      right.requirementIds.length - left.requirementIds.length
+  );
+}
+
 export function analyzeDocuments(documents, threshold = 0.45, levelOverrides = {}) {
   const normalizedDocuments = documents.map((document, index) => ({
     id: document.id ?? index,
@@ -519,16 +726,23 @@ export function analyzeDocuments(documents, threshold = 0.45, levelOverrides = {
     return {
       ...document,
       documentLevel,
-      requirements,
+      requirements: requirements.map((requirement) => ({
+        ...requirement,
+        hierarchyReview: evaluateRequirementHierarchy(requirement),
+      })),
       requirementCount: requirements.length,
     };
   });
   const edges = computeSimilarityEdges(documentsWithLevel, threshold);
   const groups = buildDuplicateGroups(documentsWithLevel, edges);
   const requirements = documentsWithLevel.flatMap((document) => document.requirements);
+  const requirementEdges = computeRequirementSimilarityEdges(requirements, threshold);
+  const requirementGroups = buildRequirementGroups(requirements, requirementEdges);
   return {
     documents: documentsWithLevel,
     requirements,
+    requirementEdges,
+    requirementGroups,
     edges,
     groups,
   };

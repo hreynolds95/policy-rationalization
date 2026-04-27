@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { analyzeDocuments } from "../docs/analysis.mjs";
 import { buildCsvExport, buildExportPayload, buildMarkdownExport } from "../docs/app.mjs";
 
-test("buildCsvExport includes current filtered document review fields", () => {
+test("buildCsvExport includes requirement-level mapping review fields", () => {
   const result = analyzeDocuments(
     [
       {
@@ -27,11 +27,11 @@ test("buildCsvExport includes current filtered document review fields", () => {
   const payload = buildExportPayload(result, [], "", "all", 0.05);
   const csv = buildCsvExport(payload);
 
-  assert.match(csv, /title,source,requirement_count,inferred_type,auto_inferred_type,override_type,level_fit/);
-  assert.match(csv, /recommendation_bucket/);
+  assert.match(csv, /document_title,source,requirement_id,section,anchor,document_type,requirement_type,hierarchy_alignment/);
+  assert.match(csv, /group_bucket,group_review_status,canonical_document,canonical_requirement_text,requirement_text/);
   assert.match(csv, /Records Retention Procedure/);
-  assert.match(csv, /policy,procedure,policy/);
-  assert.match(csv, /,1,policy/);
+  assert.match(csv, /procedure-like content/);
+  assert.match(csv, /policy/);
   assert.match(csv, /material-change/);
 });
 
@@ -58,9 +58,11 @@ test("buildMarkdownExport summarizes the current visible analysis view", () => {
   const markdown = buildMarkdownExport(payload);
 
   assert.match(markdown, /# Policy Rationalization Analysis/);
+  assert.match(markdown, /## Policy-On-Policies Hierarchy/);
   assert.match(markdown, /## Quick Wins/);
   assert.match(markdown, /## Material Changes/);
-  assert.match(markdown, /## Document Review Surface/);
+  assert.match(markdown, /## Document Coverage/);
   assert.match(markdown, /## Requirement Inventory/);
+  assert.match(markdown, /## Requirement Pair Review/);
   assert.match(markdown, /sample import issue/);
 });

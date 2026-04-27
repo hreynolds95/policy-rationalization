@@ -132,6 +132,9 @@ test("analyzeDocuments exposes mixed-level groups for review", () => {
   assert.equal(result.groups.length, 1);
   assert.equal(result.groups[0].checks.documentLevelConsistency, "mixed-level");
   assert.equal(result.groups[0].checks.documentLevelFit, "review-needed");
+  assert.equal(result.requirementGroups.length, 1);
+  assert.equal(result.requirementGroups[0].checks.hierarchyRelationship, "policy-to-procedure-gap");
+  assert.equal(result.requirementGroups[0].checks.scopeStatus, "contains-out-of-scope");
 });
 
 test("analyzeDocuments supports reviewer document type overrides", () => {
@@ -168,33 +171,32 @@ test("analyzeDocuments buckets consolidation recommendations into quick wins and
         id: "a",
         title: "Records Retention Policy",
         source: "manual://a",
-        text: "records retention policy records retention policy records retention requirements legal regulatory brand entities roles and responsibilities",
+        text: "Retention Requirements\n\nRecords must be retained for seven years across all entities.",
       },
       {
         id: "b",
         title: "Records Retention Policy Copy",
         source: "manual://b",
-        text: "records retention policy records retention policy records retention requirements legal regulatory brand entities roles and responsibilities",
+        text: "Retention Requirements\n\nRecords must be retained for seven years across all entities.",
       },
       {
         id: "c",
-        title: "Access Review Policy",
+        title: "Complaint Escalation Policy",
         source: "manual://c",
-        text: "customer complaint policy customer complaint governance customer complaint evidence customer complaint review across brands and legal entities",
+        text: "Complaint Escalation\n\nCustomer complaints must be escalated to Compliance within one business day.",
       },
       {
         id: "d",
-        title: "Access Review Procedure",
+        title: "Complaint Escalation Procedure",
         source: "manual://d",
-        text: "customer complaint procedure customer complaint workflow customer complaint evidence. step 1 collect complaint evidence. step 2 validate complaint approvals. step 3 archive complaint records.",
+        text: "Complaint Escalation Workflow\n\nStep 1 escalate customer complaints to Compliance within one business day. Step 2 archive the escalation record.",
       },
     ],
-    0.2
+    0.35
   );
 
-  assert.equal(result.groups.length, 2);
-  assert.ok(result.groups.some((group) => group.recommendationBucket === "quick-win"));
-  assert.ok(result.groups.some((group) => group.recommendationBucket === "material-change"));
+  assert.ok(result.requirementGroups.some((group) => group.recommendationBucket === "quick-win"));
+  assert.ok(result.requirementGroups.some((group) => group.recommendationBucket === "material-change"));
 });
 
 test("analyzeDocuments exposes extracted requirement inventory per document", () => {
@@ -213,4 +215,28 @@ test("analyzeDocuments exposes extracted requirement inventory per document", ()
   assert.equal(result.requirements.length, 2);
   assert.equal(result.documents[0].requirementCount, 2);
   assert.equal(result.documents[0].requirements[0].sourceLocation.section, "Retention Requirements");
+});
+
+test("analyzeDocuments compares extracted requirements across documents", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Access Policy",
+        source: "manual://a",
+        text: "Access Requirements\n\nAccess must be approved by a manager.\n\nLogs must be retained for one year.",
+      },
+      {
+        id: "b",
+        title: "Access Standard",
+        source: "manual://b",
+        text: "Access Requirements\n\nAccess must be approved by a manager.\n\nLogs must be reviewed weekly.",
+      },
+    ],
+    0.2
+  );
+
+  assert.ok(result.requirementEdges.length >= 1);
+  assert.ok(result.requirementGroups.length >= 1);
+  assert.equal(result.requirementGroups[0].checks.oneToOneMappingStatus, "clean");
 });

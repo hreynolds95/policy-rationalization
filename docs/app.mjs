@@ -41,15 +41,15 @@ const WIZARD_ROUTES = [
     id: "groups",
     hash: "#/groups",
     step: "Step 3",
-    title: "Review consolidation groups",
-    subtitle: "Evaluate canonical candidates, watch-outs, and duplicate cluster recommendations.",
+    title: "Review requirement mapping",
+    subtitle: "Review requirement-to-requirement matches, 1:1 conflicts, and hierarchy watch-outs.",
   },
   {
     id: "details",
     hash: "#/details",
     step: "Step 4",
-    title: "Review document and pair details",
-    subtitle: "Inspect the supporting evidence, browse the analyzed corpus, and spot overlap outliers.",
+    title: "Review supporting detail",
+    subtitle: "Inspect the analyzed documents and highest-overlap requirement pairs.",
   },
   {
     id: "export",
@@ -761,9 +761,16 @@ function buildStepHero(routeId, context) {
 function buildAnalysisSummaryMarkup() {
   const result = state.analysisView.result;
   const summary = buildSummary(result);
-  const strongestGroup = result.groups[0];
+  const strongestGroup = result.requirementGroups[0];
+  const mappedRequirementCount = new Set(
+    result.requirementGroups.flatMap((group) => group.requirementIds)
+  ).size;
+  const unmappedRequirementCount = Math.max(0, result.requirements.length - mappedRequirementCount);
+  const hierarchyReviewCount = result.requirements.filter(
+    (requirement) => requirement.hierarchyReview.alignment !== "aligned"
+  ).length;
   const strongestCanonical = strongestGroup
-    ? result.documents.find((document) => document.id === strongestGroup.recommendedPrimaryId)?.title || "None"
+    ? result.requirements.find((requirement) => requirement.requirementId === strongestGroup.recommendedPrimaryRequirementId)?.sourceDocumentTitle || "None"
     : "None";
   return `
     ${buildDemoBannerMarkup("results")}
@@ -777,11 +784,40 @@ function buildAnalysisSummaryMarkup() {
           <span class="source-chip source-chip--active">Canonical: ${escapeHtml(strongestCanonical)}</span>
           <span class="doc-badge">Docs ${result.documents.length}</span>
           <span class="doc-badge">Reqs ${result.requirements.length}</span>
-          <span class="doc-badge doc-badge--warn">Pairs ${result.edges.length}</span>
-          <span class="doc-badge doc-badge--ok">Groups ${result.groups.length}</span>
+          <span class="doc-badge doc-badge--ok">Mapped ${mappedRequirementCount}</span>
+          <span class="doc-badge ${unmappedRequirementCount ? "doc-badge--warn" : "doc-badge--ok"}">Unmapped ${unmappedRequirementCount}</span>
+          <span class="doc-badge ${hierarchyReviewCount ? "doc-badge--warn" : "doc-badge--ok"}">Hierarchy ${hierarchyReviewCount}</span>
+          <span class="doc-badge doc-badge--warn">Pairs ${result.requirementEdges.length}</span>
+          <span class="doc-badge doc-badge--ok">Groups ${result.requirementGroups.length}</span>
         </div>
       </div>
     </div>
+  `;
+}
+
+function buildHierarchyReferenceMarkup() {
+  return `
+    <section class="panel table-panel">
+      <div class="step-card-header">
+        <h3>Policy on policies hierarchy</h3>
+        <p class="section-subtitle">Requirement review is anchored to the expected document structure before any consolidation recommendation is treated as clean.</p>
+      </div>
+      <div class="check-grid">
+        <div class="check">
+          <span class="check__label">Policy</span>
+          <strong class="check__value">High-level intent and binding requirements</strong>
+        </div>
+        <div class="check">
+          <span class="check__label">Standard</span>
+          <strong class="check__value">Control detail and minimum requirements beneath policy</strong>
+        </div>
+        <div class="check">
+          <span class="check__label">Procedure</span>
+          <strong class="check__value">Step-based execution content and out of scope for Policy Team artifacts</strong>
+        </div>
+      </div>
+      <p class="document-note">Direct policy-to-procedure mapping, procedure-heavy policy text, and standard or procedure language embedded in the wrong level are flagged for review.</p>
+    </section>
   `;
 }
 
@@ -791,6 +827,7 @@ function buildLevelReviewStepMarkup() {
     <section class="wizard-step-page">
       ${buildStepHero("level-review")}
       ${buildAnalysisSummaryMarkup()}
+      ${buildHierarchyReferenceMarkup()}
       <section class="panel table-panel">
         <div class="step-card-header">
           <h3>Requirement inventory</h3>
@@ -804,15 +841,15 @@ function buildLevelReviewStepMarkup() {
 }
 
 function buildGroupsStepMarkup() {
-  const groupsHtml = buildGroupMarkup(state.analysisView.result, state.analysisView.result.groups);
+  const groupsHtml = buildRequirementGroupMarkup(state.analysisView.result, state.analysisView.result.requirementGroups);
   return `
     <section class="wizard-step-page">
       ${buildStepHero("groups")}
       ${buildAnalysisSummaryMarkup()}
       <section class="panel table-panel">
         <div class="step-card-header">
-          <h3>Recommended consolidation groups</h3>
-          <p class="section-subtitle">Review canonical candidates and blocker flags.</p>
+          <h3>Requirement mapping groups</h3>
+          <p class="section-subtitle">Review cross-document requirement matches, 1:1 mapping conflicts, and hierarchy watch-outs.</p>
         </div>
         <div class="results-section">${groupsHtml}</div>
       </section>
@@ -841,20 +878,20 @@ function buildDetailsStepMarkup() {
             <input
               type="text"
               id="analysisSearch"
-              placeholder="Search titles, sources, canonical candidates, or recommendations..."
+              placeholder="Search requirement text, source sections, document titles, or canonical candidates..."
               autocomplete="off"
               value="${escapeHtml(state.analysisView.query)}"
             >
           </div>
-          <span class="doc-badge">${filtered.documents.length} docs / ${filtered.edges.length} pairs</span>
+          <span class="doc-badge">${filtered.documents.length} docs / ${filtered.requirements.length} reqs / ${filtered.edges.length} pairs</span>
         </div>
         <div class="filter-toolbar">
           <div class="toggle-group" data-filter-group>
             ${buildFilterButton("all", "All", state.analysisView.filter)}
-            ${buildFilterButton("level", "Level review", state.analysisView.filter)}
-            ${buildFilterButton("review", "Review flags", state.analysisView.filter)}
-            ${buildFilterButton("ready", "Cleaner fits", state.analysisView.filter)}
-            ${buildFilterButton("orphan", "Ungrouped docs", state.analysisView.filter)}
+            ${buildFilterButton("level", "Hierarchy review", state.analysisView.filter)}
+            ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
+            ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
+            ${buildFilterButton("orphan", "Unmapped docs", state.analysisView.filter)}
           </div>
         </div>
       </section>
@@ -1214,22 +1251,26 @@ function loadManualDocuments(entries = state.workspace.manualEntries) {
 }
 
 function buildSummary(result) {
-  const levelReviewCount = result.documents.filter(
-    (document) => document.documentLevel.levelFit !== "aligned"
+  const levelReviewCount = result.requirements.filter(
+    (requirement) => requirement.hierarchyReview.alignment !== "aligned"
   ).length;
   const requirementCount = result.requirements.length;
-  const quickWinCount = result.groups.filter((group) => group.recommendationBucket === "quick-win").length;
-  const materialChangeCount = result.groups.filter((group) => group.recommendationBucket === "material-change").length;
-  if (!result.groups.length) {
-    if (!result.edges.length) {
-      return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). No consolidation cluster cleared the current threshold yet. ${levelReviewCount ? `${levelReviewCount} document(s) still show level issues worth cleaning up before consolidation work.` : "The document set may simply be cleanly separated."}`;
+  const mappedRequirementCount = new Set(
+    result.requirementGroups.flatMap((group) => group.requirementIds)
+  ).size;
+  const unmappedRequirementCount = Math.max(0, requirementCount - mappedRequirementCount);
+  const quickWinCount = result.requirementGroups.filter((group) => group.recommendationBucket === "quick-win").length;
+  const materialChangeCount = result.requirementGroups.filter((group) => group.recommendationBucket === "material-change").length;
+  if (!result.requirementGroups.length) {
+    if (!result.requirementEdges.length) {
+      return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). No cross-document requirement mapping group cleared the current threshold yet. ${levelReviewCount ? `${levelReviewCount} requirement(s) still show hierarchy issues worth cleaning up before consolidation work.` : "The current set may simply be cleanly separated at the requirement level."}`;
     }
-    return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). A few documents overlap, but they do not yet form a strong duplicate group. ${levelReviewCount ? `${levelReviewCount} document(s) still show level issues worth cleaning up first.` : "Review the top pairs first and consider lowering the threshold slightly if you want broader clustering."}`;
+    return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). A few requirements overlap across documents, but they do not yet form a strong mapping group. ${levelReviewCount ? `${levelReviewCount} requirement(s) still show hierarchy issues worth cleaning up first.` : "Review the top requirement pairs first and consider lowering the threshold slightly if you want broader mapping."}`;
   }
 
-  const strongest = result.groups[0];
-  const primary = result.documents.find((document) => document.id === strongest.recommendedPrimaryId);
-  return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). ${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. ${quickWinCount} quick win group(s) and ${materialChangeCount} material change group(s) are visible. ${levelReviewCount ? `${levelReviewCount} document(s) show possible policy-versus-standard-versus-procedure level issues and should be corrected before consolidation.` : "The current prototype still groups at the document level, but the requirement inventory is now available for the next mapping phase."}`;
+  const strongest = result.requirementGroups[0];
+  const primary = result.requirements.find((requirement) => requirement.requirementId === strongest.recommendedPrimaryRequirementId);
+  return `Extracted ${requirementCount} requirement unit(s) across ${result.documents.length} document(s). ${strongest.requirementIds.length} requirements cluster around ${primary.sourceDocumentTitle} as the strongest canonical starting point. ${mappedRequirementCount} requirement(s) are mapped, ${unmappedRequirementCount} remain unmapped, and ${quickWinCount} quick win mapping group(s) plus ${materialChangeCount} material change mapping group(s) are visible. ${levelReviewCount ? `${levelReviewCount} requirement(s) show hierarchy issues against the policy-on-policies structure and should be corrected before consolidation.` : "The current review compares every extracted requirement across documents and against the expected policy-standard-procedure hierarchy."}`;
 }
 
 function buildLevelMarkup(documents) {
@@ -1271,6 +1312,13 @@ function buildRequirementInventoryMarkup(documents) {
     return `<article class="result-card"><p>No requirement inventory is available yet.</p></article>`;
   }
 
+  const requirementGroupById = new Map();
+  for (const group of state.analysisView.result.requirementGroups) {
+    for (const requirementId of group.requirementIds) {
+      requirementGroupById.set(requirementId, group);
+    }
+  }
+
   return documents
     .map((document) => `
       <article class="result-card">
@@ -1288,77 +1336,104 @@ function buildRequirementInventoryMarkup(documents) {
         </div>
         ${document.documentLevel.levelIssues.length ? `<p class="document-note">${document.documentLevel.levelIssues.join("; ")}</p>` : ""}
         <ul class="requirement-list">
-          ${document.requirements.map((requirement) => `
-            <li class="requirement-row">
+          ${document.requirements.map((requirement) => {
+            const requirementGroup = requirementGroupById.get(requirement.requirementId);
+            const hierarchyAlignment = requirement.hierarchyReview.alignment;
+            return `
+            <li class="requirement-row ${hierarchyAlignment === "aligned" ? "" : "requirement-row--flagged"}">
               <div class="requirement-row__main">
                 <strong>R${requirement.sourceLocation.paragraphIndex}.${requirement.sourceLocation.itemIndex}</strong>
                 <p>${requirement.requirementText}</p>
                 <span>${requirement.sourceLocation.section || "Document body"}</span>
+                ${requirement.hierarchyReview.issues.length ? `<p class="document-note">${requirement.hierarchyReview.issues.join("; ")}</p>` : ""}
               </div>
               <div class="requirement-row__meta">
                 <span class="doc-badge">${requirement.requirementType}</span>
+                <span class="doc-badge ${hierarchyAlignment === "aligned" ? "doc-badge--ok" : "doc-badge--warn"}">
+                  ${hierarchyAlignment}
+                </span>
+                <span class="doc-badge ${requirement.hierarchyReview.scopeStatus === "in-scope" ? "doc-badge--ok" : "doc-badge--warn"}">
+                  ${requirement.hierarchyReview.scopeStatus === "in-scope" ? "In scope" : "Out of scope"}
+                </span>
+                <span class="doc-badge ${requirementGroup ? "doc-badge--ok" : ""}">
+                  ${requirementGroup ? `Mapped group (${requirementGroup.requirementIds.length})` : "No match group"}
+                </span>
               </div>
             </li>
-          `).join("")}
+          `;
+          }).join("")}
         </ul>
       </article>
     `)
     .join("");
 }
 
-function buildGroupMarkup(result, groups) {
+function buildRequirementGroupMarkup(result, groups) {
   if (!groups.length) {
-    return `<article class="result-card"><p>No duplicate groups were found at the current threshold.</p></article>`;
+    return `<article class="result-card"><p>No cross-document requirement mapping groups were found at the current threshold.</p></article>`;
   }
 
-  const renderGroupCard = (group) => {
-      const groupIndex = result.groups.findIndex((candidate) => candidate.recommendedPrimaryId === group.recommendedPrimaryId);
-      const documents = group.documentIds
-        .map((id) => result.documents.find((document) => document.id === id))
-        .filter(Boolean);
-      const primary = result.documents.find((document) => document.id === group.recommendedPrimaryId);
-      return `
-        <article class="result-card">
-          <div class="result-card__header result-card__header--tight">
-            <div>
-              <h4>${primary.title}</h4>
-              <p class="result-card__meta">Group ${groupIndex + 1}</p>
-            </div>
-            <div class="result-card__badges">
-              <span class="doc-badge ${group.recommendationBucket === "quick-win" ? "doc-badge--ok" : "doc-badge--warn"}">
-                ${group.recommendationBucket === "quick-win" ? "Quick win" : "Material change"}
-              </span>
-              <span class="pill">${group.avgInternalSimilarity.toFixed(4)} similarity</span>
-            </div>
+  const renderRequirementGroupCard = (group) => {
+    const groupIndex = result.requirementGroups.findIndex(
+      (candidate) => candidate.recommendedPrimaryRequirementId === group.recommendedPrimaryRequirementId
+    );
+    const requirements = group.requirementIds
+      .map((id) => result.requirements.find((requirement) => requirement.requirementId === id))
+      .filter(Boolean);
+    const primary = result.requirements.find(
+      (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
+    );
+
+    return `
+      <article class="result-card">
+        <div class="result-card__header result-card__header--tight">
+          <div>
+            <h4>${primary.sourceDocumentTitle}</h4>
+            <p class="result-card__meta">Requirement group ${groupIndex + 1}</p>
           </div>
-          <p class="result-card__summary">${group.recommendation}</p>
-          <div class="check-grid">
-            ${Object.entries(group.checks)
-              .map(
-                ([label, value]) => `
-                  <div class="check">
-                    <span class="check__label">${formatLabel(label)}</span>
-                    <strong class="check__value">${value}</strong>
-                  </div>
-                `
-              )
-              .join("")}
+          <div class="result-card__badges">
+            <span class="doc-badge ${group.recommendationBucket === "quick-win" ? "doc-badge--ok" : "doc-badge--warn"}">
+              ${group.recommendationBucket === "quick-win" ? "Quick win" : "Material change"}
+            </span>
+            <span class="pill">${group.avgInternalSimilarity.toFixed(4)} similarity</span>
           </div>
-          <ul class="source-list">
-            ${documents
-              .map(
-                (document) => `
-                  <li>
-                    <strong>${document.title}</strong>
-                    <span>${document.source}</span>
-                  </li>
-                `
-              )
-              .join("")}
-          </ul>
-        </article>
-      `;
-    };
+        </div>
+        <p class="result-card__summary">${primary.requirementText}</p>
+        <p class="result-card__summary">${group.recommendation}</p>
+        <div class="check-grid">
+          ${Object.entries(group.checks)
+            .filter(([label]) => label !== "hierarchyIssues")
+            .map(
+              ([label, value]) => `
+                <div class="check">
+                  <span class="check__label">${formatLabel(label)}</span>
+                  <strong class="check__value">${value}</strong>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+        ${group.checks.hierarchyIssues?.length ? `<p class="document-note">${group.checks.hierarchyIssues.join("; ")}</p>` : ""}
+        <ul class="requirement-list">
+          ${requirements.map((requirement) => `
+            <li class="requirement-row">
+              <div class="requirement-row__main">
+                <strong>${requirement.sourceDocumentTitle}</strong>
+                <p>${requirement.requirementText}</p>
+                <span>${requirement.sourceLocation.section || "Document body"} | ${requirement.sourceDocumentType}</span>
+              </div>
+              <div class="requirement-row__meta">
+                <span class="doc-badge">${requirement.requirementType}</span>
+                <span class="doc-badge ${requirement.hierarchyReview.alignment === "aligned" ? "doc-badge--ok" : "doc-badge--warn"}">
+                  ${requirement.hierarchyReview.alignment}
+                </span>
+              </div>
+            </li>
+          `).join("")}
+        </ul>
+      </article>
+    `;
+  };
 
   const quickWins = groups.filter((group) => group.recommendationBucket === "quick-win");
   const materialChanges = groups.filter((group) => group.recommendationBucket === "material-change");
@@ -1370,20 +1445,20 @@ function buildGroupMarkup(result, groups) {
           <h4>Quick wins</h4>
           <span class="doc-badge doc-badge--ok">${quickWins.length}</span>
         </div>
-        <p class="section-subtitle">Consolidation candidates that appear ready without significant rework to scope, level, or required compliance language.</p>
+        <p class="section-subtitle">Requirement mappings that appear 1:1 clean and aligned to the expected hierarchy.</p>
         ${quickWins.length
-          ? quickWins.map((group) => renderGroupCard(group)).join("")
-          : `<article class="result-card"><p>No quick wins are visible in the current view.</p></article>`}
+          ? quickWins.map((group) => renderRequirementGroupCard(group)).join("")
+          : `<article class="result-card"><p>No quick win requirement groups are visible in the current view.</p></article>`}
       </section>
       <section class="bucket-section">
         <div class="bucket-section__header">
           <h4>Material changes</h4>
           <span class="doc-badge doc-badge--warn">${materialChanges.length}</span>
         </div>
-        <p class="section-subtitle">Groups that should be treated as heavier rationalization work because scope, level, regulatory, or procedural issues need to be resolved first.</p>
+        <p class="section-subtitle">Requirement mappings with 1:1 conflicts, hierarchy problems, or out-of-scope procedure content.</p>
         ${materialChanges.length
-          ? materialChanges.map((group) => renderGroupCard(group)).join("")
-          : `<article class="result-card"><p>No material changes are visible in the current view.</p></article>`}
+          ? materialChanges.map((group) => renderRequirementGroupCard(group)).join("")
+          : `<article class="result-card"><p>No material change requirement groups are visible in the current view.</p></article>`}
       </section>
     </div>
   `;
@@ -1391,7 +1466,7 @@ function buildGroupMarkup(result, groups) {
 
 function buildPairMarkup(result, edges) {
   if (!edges.length) {
-    return `<article class="result-card"><p>No document pairs cleared the current threshold.</p></article>`;
+    return `<article class="result-card"><p>No requirement pairs cleared the current threshold.</p></article>`;
   }
 
   return `
@@ -1400,13 +1475,13 @@ function buildPairMarkup(result, edges) {
         ${edges
           .slice(0, 12)
           .map((edge) => {
-            const left = result.documents.find((document) => document.id === edge.leftId);
-            const right = result.documents.find((document) => document.id === edge.rightId);
+            const left = result.requirements.find((requirement) => requirement.requirementId === edge.leftRequirementId);
+            const right = result.requirements.find((requirement) => requirement.requirementId === edge.rightRequirementId);
             return `
             <li>
-              <span>${left.title}</span>
+              <span>${left?.sourceDocumentTitle || edge.leftRequirementId}</span>
               <strong class="pair-score">${edge.score.toFixed(4)}</strong>
-              <span>${right.title}</span>
+              <span>${right?.sourceDocumentTitle || edge.rightRequirementId}</span>
             </li>
           `;
           })
@@ -1502,42 +1577,49 @@ function buildFilterButton(value, label, activeFilter) {
   return `<button class="toggle-btn ${activeClass}" type="button" data-view-filter="${value}">${label}</button>`;
 }
 
-function groupHasReviewFlags(group) {
+function requirementGroupHasReviewFlags(group) {
   return (
-    group.checks.documentLevelConsistency === "mixed-level" ||
-    group.checks.documentLevelFit === "review-needed" ||
-    group.checks.brandScopeCoverage === "missing" ||
-    group.checks.regulatoryReflection === "missing" ||
-    group.checks.proceduralContentDetected === "yes"
+    group.checks.oneToOneMappingStatus === "conflict" ||
+    group.checks.hierarchyReviewStatus === "review-needed" ||
+    group.checks.scopeStatus === "contains-out-of-scope" ||
+    group.checks.hierarchyRelationship === "policy-to-procedure-gap" ||
+    group.checks.hierarchyRelationship === "mixed-level"
   );
 }
 
 function buildDocumentViewModel(result) {
-  const groupsByDocumentId = new Map();
-  for (const group of result.groups) {
-    for (const documentId of group.documentIds) {
-      groupsByDocumentId.set(documentId, group);
+  const requirementGroupsByDocumentId = new Map();
+  for (const group of result.requirementGroups) {
+    for (const requirementId of group.requirementIds) {
+      const requirement = result.requirements.find((candidate) => candidate.requirementId === requirementId);
+      if (!requirement) {
+        continue;
+      }
+      if (!requirementGroupsByDocumentId.has(requirement.documentId)) {
+        requirementGroupsByDocumentId.set(requirement.documentId, []);
+      }
+      requirementGroupsByDocumentId.get(requirement.documentId).push(group);
     }
   }
 
   return result.documents.map((document) => {
-    const group = groupsByDocumentId.get(document.id);
-    const isCanonical = group && group.recommendedPrimaryId === document.id;
-    const needsReview = group ? groupHasReviewFlags(group) : false;
+    const groups = requirementGroupsByDocumentId.get(document.id) || [];
+    const mappedRequirements = document.requirements.filter((requirement) =>
+      groups.some((group) => group.requirementIds.includes(requirement.requirementId))
+    ).length;
+    const needsReview = groups.some((group) => requirementGroupHasReviewFlags(group));
     return {
       ...document,
-      groupLabel: group
-        ? isCanonical
-          ? "Canonical candidate"
-          : "Grouped document"
-        : "Ungrouped",
-      needsReview: group
+      groupLabel: mappedRequirements
+        ? `${mappedRequirements}/${document.requirementCount} mapped`
+        : "Unmapped",
+      needsReview: groups.length
         ? needsReview || document.documentLevel.levelFit !== "aligned"
         : document.documentLevel.levelFit !== "aligned",
-      canonicalTitle: group
-        ? result.documents.find((candidate) => candidate.id === group.recommendedPrimaryId)?.title || ""
+      canonicalTitle: groups.length
+        ? result.requirements.find((candidate) => candidate.requirementId === groups[0].recommendedPrimaryRequirementId)?.sourceDocumentTitle || ""
         : "",
-      recommendationBucket: group ? group.recommendationBucket : "",
+      recommendationBucket: groups.length ? groups[0].recommendationBucket : "",
     };
   });
 }
@@ -1552,17 +1634,23 @@ function matchesSearch(haystacks, query) {
 function filterAnalysisView(result, issues, rawQuery, filter) {
   const query = rawQuery.trim().toLowerCase();
   const documents = buildDocumentViewModel(result);
-  const visibleDocumentMap = new Map(documents.map((document) => [document.id, document]));
 
-  const filteredGroups = result.groups.filter((group) => {
-    const primary = result.documents.find((document) => document.id === group.recommendedPrimaryId);
-    const groupReview = groupHasReviewFlags(group);
-    const memberDocuments = group.documentIds.map((id) => visibleDocumentMap.get(id)).filter(Boolean);
+  const filteredGroups = result.requirementGroups.filter((group) => {
+    const primary = result.requirements.find((requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId);
+    const groupReview = requirementGroupHasReviewFlags(group);
+    const memberRequirements = group.requirementIds
+      .map((id) => result.requirements.find((requirement) => requirement.requirementId === id))
+      .filter(Boolean);
     const searchMatch = matchesSearch(
       [
-        primary?.title || "",
+        primary?.sourceDocumentTitle || "",
+        primary?.requirementText || "",
         group.recommendation,
-        ...memberDocuments.flatMap((document) => [document.title, document.source]),
+        ...memberRequirements.flatMap((requirement) => [
+          requirement.sourceDocumentTitle,
+          requirement.requirementText,
+          requirement.sourceLocation.section,
+        ]),
       ],
       query
     );
@@ -1573,7 +1661,11 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
       return groupReview;
     }
     if (filter === "level") {
-      return group.checks.documentLevelConsistency === "mixed-level" || group.checks.documentLevelFit === "review-needed";
+      return (
+        group.checks.hierarchyReviewStatus === "review-needed" ||
+        group.checks.hierarchyRelationship === "policy-to-procedure-gap" ||
+        group.checks.scopeStatus === "contains-out-of-scope"
+      );
     }
     if (filter === "ready") {
       return !groupReview;
@@ -1596,26 +1688,47 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
       return document.needsReview;
     }
     if (filter === "level") {
-      return document.documentLevel.levelFit !== "aligned";
+      return document.needsReview || document.documentLevel.levelFit !== "aligned";
     }
     if (filter === "ready") {
-      return document.groupLabel !== "Ungrouped" && !document.needsReview;
+      return document.groupLabel !== "Unmapped" && !document.needsReview;
     }
     if (filter === "orphan") {
-      return document.groupLabel === "Ungrouped";
+      return document.groupLabel === "Unmapped";
+    }
+    return true;
+  });
+
+  const filteredRequirements = result.requirements.filter((requirement) => {
+    const searchMatch = matchesSearch(
+      [
+        requirement.sourceDocumentTitle,
+        requirement.requirementText,
+        requirement.sourceLocation.section,
+        requirement.requirementType,
+      ],
+      query
+    );
+    if (!searchMatch) {
+      return false;
+    }
+    if (filter === "level") {
+      return requirement.hierarchyReview.alignment !== "aligned";
     }
     return true;
   });
 
   const filteredDocumentIds = new Set(filteredDocuments.map((document) => document.id));
-  const filteredEdges = result.edges.filter(
-    (edge) => filteredDocumentIds.has(edge.leftId) && filteredDocumentIds.has(edge.rightId)
+  const filteredRequirementIds = new Set(filteredRequirements.map((requirement) => requirement.requirementId));
+  const filteredEdges = result.requirementEdges.filter(
+    (edge) => filteredRequirementIds.has(edge.leftRequirementId) && filteredRequirementIds.has(edge.rightRequirementId)
   );
   const filteredIssues = issues.filter((issue) => matchesSearch([issue], query));
 
   return {
     groups: filteredGroups,
     documents: filteredDocuments,
+    requirements: filteredRequirements,
     edges: filteredEdges,
     issues: filteredIssues,
   };
@@ -1623,16 +1736,18 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
 
 export function buildExportPayload(result, issues, rawQuery, filter, threshold = 0.45) {
   const filtered = filterAnalysisView(result, issues, rawQuery, filter);
+  const strongestCanonicalRequirement = result.requirementGroups[0]
+    ? result.requirements.find(
+        (requirement) => requirement.requirementId === result.requirementGroups[0].recommendedPrimaryRequirementId
+      )
+    : null;
   return {
     createdAt: new Date().toISOString(),
     threshold,
     query: rawQuery.trim(),
     filter,
     summary: buildSummary(result),
-    strongestCanonicalTitle:
-      result.groups[0] && result.documents.find((document) => document.id === result.groups[0].recommendedPrimaryId)
-        ? result.documents.find((document) => document.id === result.groups[0].recommendedPrimaryId).title
-        : "None",
+    strongestCanonicalTitle: strongestCanonicalRequirement?.sourceDocumentTitle || "None",
     filtered,
   };
 }
@@ -1648,35 +1763,54 @@ function csvEscape(value) {
 export function buildCsvExport(payload) {
   const rows = [
     [
-      "title",
+      "document_title",
       "source",
-      "requirement_count",
-      "inferred_type",
-      "auto_inferred_type",
-      "override_type",
-      "level_fit",
-      "level_issues",
-      "group_label",
-      "canonical_title",
-      "needs_review",
-      "recommendation_bucket",
+      "requirement_id",
+      "section",
+      "anchor",
+      "document_type",
+      "requirement_type",
+      "hierarchy_alignment",
+      "scope_status",
+      "mapped_group_size",
+      "group_bucket",
+      "group_review_status",
+      "canonical_document",
+      "canonical_requirement_text",
+      "requirement_text",
     ],
   ];
 
-  for (const document of payload.filtered.documents) {
+  const groupByRequirementId = new Map();
+  for (const group of payload.filtered.groups) {
+    for (const requirementId of group.requirementIds) {
+      groupByRequirementId.set(requirementId, group);
+    }
+  }
+
+  for (const requirement of payload.filtered.requirements) {
+    const group = groupByRequirementId.get(requirement.requirementId);
+    const primaryRequirement = group
+      ? group.requirementIds
+          .map((id) => payload.filtered.requirements.find((candidate) => candidate.requirementId === id))
+          .find((candidate) => candidate?.requirementId === group.recommendedPrimaryRequirementId)
+      : null;
     rows.push([
-      document.title,
-      document.source,
-      String(document.requirementCount || 0),
-      document.documentLevel.inferredType,
-      document.documentLevel.autoInferredType || document.documentLevel.inferredType,
-      document.documentLevel.overrideType || "",
-      document.documentLevel.levelFit,
-      document.documentLevel.levelIssues.join("; "),
-      document.groupLabel || "",
-      document.canonicalTitle || "",
-      document.needsReview ? "yes" : "no",
-      document.recommendationBucket || "",
+      requirement.sourceDocumentTitle,
+      payload.filtered.documents.find((document) => document.id === requirement.documentId)?.source || "",
+      requirement.requirementId,
+      requirement.sourceLocation.section || "Document body",
+      `P${requirement.sourceLocation.paragraphIndex}.${requirement.sourceLocation.itemIndex}`,
+      requirement.sourceDocumentType,
+      requirement.requirementType,
+      requirement.hierarchyReview.alignment,
+      requirement.hierarchyReview.scopeStatus,
+      String(group?.requirementIds.length || 0),
+      group?.recommendationBucket || "",
+      group?.checks?.hierarchyReviewStatus || "",
+      primaryRequirement?.sourceDocumentTitle || "",
+      primaryRequirement?.requirementText || "",
+      requirement.requirementText,
     ]);
   }
 
@@ -1686,6 +1820,9 @@ export function buildCsvExport(payload) {
 export function buildMarkdownExport(payload) {
   const quickWins = payload.filtered.groups.filter((group) => group.recommendationBucket === "quick-win");
   const materialChanges = payload.filtered.groups.filter((group) => group.recommendationBucket === "material-change");
+  const mappedRequirementCount = new Set(
+    payload.filtered.groups.flatMap((group) => group.requirementIds)
+  ).size;
   const lines = [
     "# Policy Rationalization Analysis",
     "",
@@ -1702,13 +1839,22 @@ export function buildMarkdownExport(payload) {
     "",
     "## Snapshot",
     "",
-    `- Visible duplicate groups: ${payload.filtered.groups.length}`,
-    `- Quick win groups: ${quickWins.length}`,
-    `- Material change groups: ${materialChanges.length}`,
+    `- Visible requirement groups: ${payload.filtered.groups.length}`,
+    `- Quick win requirement groups: ${quickWins.length}`,
+    `- Material change requirement groups: ${materialChanges.length}`,
     `- Visible documents: ${payload.filtered.documents.length}`,
-    `- Extracted requirements: ${payload.filtered.documents.reduce((sum, document) => sum + (document.requirementCount || 0), 0)}`,
-    `- Visible similarity pairs: ${payload.filtered.edges.length}`,
+    `- Visible requirements: ${payload.filtered.requirements.length}`,
+    `- Mapped visible requirements: ${mappedRequirementCount}`,
+    `- Unmapped visible requirements: ${Math.max(0, payload.filtered.requirements.length - mappedRequirementCount)}`,
+    `- Visible requirement pairs: ${payload.filtered.edges.length}`,
     `- Visible import issues: ${payload.filtered.issues.length}`,
+    "",
+    "## Policy-On-Policies Hierarchy",
+    "",
+    "- Policy: high-level intent and binding requirements.",
+    "- Standard: control detail and minimum requirements beneath policy.",
+    "- Procedure: step-based execution content and out of scope for Policy Team artifacts.",
+    "- Direct policy-to-procedure mapping and mixed-level requirement language are treated as review flags.",
     "",
     "## Quick Wins",
     "",
@@ -1718,17 +1864,27 @@ export function buildMarkdownExport(payload) {
     lines.push("No quick win groups are visible in the current view.", "");
   } else {
     quickWins.forEach((group, index) => {
-      const groupDocuments = group.documentIds
-        .map((id) => payload.filtered.documents.find((document) => document.id === id))
+      const groupRequirements = group.requirementIds
+        .map((id) => payload.filtered.requirements.find((requirement) => requirement.requirementId === id))
         .filter(Boolean);
+      const primaryRequirement = groupRequirements.find(
+        (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
+      );
       lines.push(`### Group ${index + 1}`);
       lines.push("");
       lines.push(`- Recommendation bucket: Quick win`);
       lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
+      lines.push(`- Canonical source: ${primaryRequirement?.sourceDocumentTitle || "Unknown"}`);
+      lines.push(`- Canonical requirement: ${primaryRequirement?.requirementText || "Unknown"}`);
       lines.push(`- Recommendation: ${group.recommendation}`);
       lines.push(`- Checks: ${Object.entries(group.checks).map(([label, value]) => `${formatLabel(label)} = ${value}`).join("; ")}`);
-      lines.push("- Documents:");
-      lines.push(...groupDocuments.map((document) => `  - ${document.title} (${document.documentLevel.inferredType})`));
+      lines.push("- Requirements:");
+      lines.push(
+        ...groupRequirements.map(
+          (requirement) =>
+            `  - ${requirement.sourceDocumentTitle} [${requirement.sourceDocumentType}] ${requirement.requirementText}`
+        )
+      );
       lines.push("");
     });
   }
@@ -1739,22 +1895,32 @@ export function buildMarkdownExport(payload) {
     lines.push("No material change groups are visible in the current view.", "");
   } else {
     materialChanges.forEach((group, index) => {
-      const groupDocuments = group.documentIds
-        .map((id) => payload.filtered.documents.find((document) => document.id === id))
+      const groupRequirements = group.requirementIds
+        .map((id) => payload.filtered.requirements.find((requirement) => requirement.requirementId === id))
         .filter(Boolean);
+      const primaryRequirement = groupRequirements.find(
+        (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
+      );
       lines.push(`### Group ${index + 1}`);
       lines.push("");
       lines.push(`- Recommendation bucket: Material change`);
       lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
+      lines.push(`- Canonical source: ${primaryRequirement?.sourceDocumentTitle || "Unknown"}`);
+      lines.push(`- Canonical requirement: ${primaryRequirement?.requirementText || "Unknown"}`);
       lines.push(`- Recommendation: ${group.recommendation}`);
       lines.push(`- Checks: ${Object.entries(group.checks).map(([label, value]) => `${formatLabel(label)} = ${value}`).join("; ")}`);
-      lines.push("- Documents:");
-      lines.push(...groupDocuments.map((document) => `  - ${document.title} (${document.documentLevel.inferredType})`));
+      lines.push("- Requirements:");
+      lines.push(
+        ...groupRequirements.map(
+          (requirement) =>
+            `  - ${requirement.sourceDocumentTitle} [${requirement.sourceDocumentType}] ${requirement.requirementText}`
+        )
+      );
       lines.push("");
     });
   }
 
-  lines.push("## Document Review Surface", "");
+  lines.push("## Document Coverage", "");
 
   if (!payload.filtered.documents.length) {
     lines.push("No documents are visible in the current view.", "");
@@ -1798,15 +1964,17 @@ export function buildMarkdownExport(payload) {
     });
   }
 
-  lines.push("## Top Similarity Pairs", "");
+  lines.push("## Requirement Pair Review", "");
 
   if (!payload.filtered.edges.length) {
-    lines.push("No similarity pairs are visible in the current view.", "");
+    lines.push("No requirement pairs are visible in the current view.", "");
   } else {
     payload.filtered.edges.slice(0, 12).forEach((edge) => {
-      const left = payload.filtered.documents.find((document) => document.id === edge.leftId);
-      const right = payload.filtered.documents.find((document) => document.id === edge.rightId);
-      lines.push(`- ${left?.title || edge.leftId} <-> ${right?.title || edge.rightId}: ${edge.score.toFixed(4)}`);
+      const left = payload.filtered.requirements.find((requirement) => requirement.requirementId === edge.leftRequirementId);
+      const right = payload.filtered.requirements.find((requirement) => requirement.requirementId === edge.rightRequirementId);
+      lines.push(
+        `- ${left?.sourceDocumentTitle || edge.leftRequirementId}: ${left?.requirementText || ""} <-> ${right?.sourceDocumentTitle || edge.rightRequirementId}: ${right?.requirementText || ""} (${edge.score.toFixed(4)})`
+      );
     });
     lines.push("");
   }
