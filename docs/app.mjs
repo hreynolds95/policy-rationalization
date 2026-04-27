@@ -978,8 +978,12 @@ function renderProgressHeader() {
         ${WIZARD_ROUTES.map((route, index) => {
           const stateLabel = routeStates[route.id];
           const isCurrent = stateLabel === "current";
-          const disabled = stateLabel === "locked" || state.isBusy || isCurrent;
+          const disabled = stateLabel === "locked" || state.isBusy;
           if (isCurrent) {
+            const currentLabel =
+              route.id === "sources" && isSourcesWorkspaceEmpty()
+                ? "Load demo setup"
+                : "Current";
             return `
               <button
                 class="wizard-route wizard-route--${stateLabel}"
@@ -987,11 +991,12 @@ function renderProgressHeader() {
                 data-current-route="true"
                 data-scroll-current="true"
                 aria-current="step"
+                ${state.isBusy ? "disabled" : ""}
               >
                 <span class="wizard-route__number">${index + 1}</span>
                 <span class="wizard-route__text">
                   <strong>${route.title}</strong>
-                  <span>Current</span>
+                  <span>${currentLabel}</span>
                 </span>
               </button>
             `;
