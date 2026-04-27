@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { analyzeDocuments } from "../docs/analysis.mjs";
-import { buildCsvExport, buildExportPayload, buildMarkdownExport } from "../docs/app.mjs";
+import { buildCsvExport, buildExportPayload, buildMarkdownExport, buildRequirementRedlineModel } from "../docs/app.mjs";
 
 test("buildCsvExport includes requirement-level mapping review fields", () => {
   const result = analyzeDocuments(
@@ -28,7 +28,7 @@ test("buildCsvExport includes requirement-level mapping review fields", () => {
   const csv = buildCsvExport(payload);
 
   assert.match(csv, /document_title,source,requirement_id,section,anchor,document_type,requirement_type,hierarchy_alignment/);
-  assert.match(csv, /group_bucket,group_review_status,canonical_document,canonical_requirement_text,requirement_text/);
+  assert.match(csv, /group_bucket,group_review_status,canonical_document,canonical_requirement_text,redline_status,proposed_requirement_text,requirement_text/);
   assert.match(csv, /Records Retention Procedure/);
   assert.match(csv, /procedure-like content/);
   assert.match(csv, /policy/);
@@ -42,16 +42,16 @@ test("buildMarkdownExport summarizes the current visible analysis view", () => {
         id: "a",
         title: "Data Classification Policy",
         source: "manual://a",
-        text: "policy purpose scope applies must classify records across brands and entities",
+        text: "Classification Requirements\n\nCustomer data must be classified before storage.",
       },
       {
         id: "b",
         title: "Data Classification Standard",
         source: "manual://b",
-        text: "standard baseline control requirements for classification legal regulatory requirements",
+        text: "Classification Requirements\n\nCustomer data must be classified before storage using the approved internal label set.",
       },
     ],
-    0.05
+    0.2
   );
 
   const payload = buildExportPayload(result, ["sample import issue"], "", "all", 0.05);
@@ -64,5 +64,53 @@ test("buildMarkdownExport summarizes the current visible analysis view", () => {
   assert.match(markdown, /## Document Coverage/);
   assert.match(markdown, /## Requirement Inventory/);
   assert.match(markdown, /## Requirement Pair Review/);
+  assert.match(markdown, /Proposed consolidated text/);
   assert.match(markdown, /sample import issue/);
+});
+
+test("buildRequirementRedlineModel distinguishes ready and blocked redlines", () => {
+  const quickWinResult = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Records Retention Policy",
+        source: "manual://a",
+        text: "Retention Requirements\n\nRecords must be retained for seven years.",
+      },
+      {
+        id: "b",
+        title: "Records Retention Policy Copy",
+        source: "manual://b",
+        text: "Retention Requirements\n\nRecords must be retained for seven years across all entities.",
+      },
+    ],
+    0.2
+  );
+
+  const quickWinGroup = quickWinResult.requirementGroups[0];
+  const quickWinRedline = buildRequirementRedlineModel(quickWinResult, quickWinGroup);
+  assert.equal(quickWinRedline.autoRedlineStatus, "ready");
+  assert.match(quickWinRedline.standaloneUrl, /version-compare/);
+
+  const blockedResult = analyzeDocuments(
+    [
+      {
+        id: "c",
+        title: "Complaint Escalation Policy",
+        source: "manual://c",
+        text: "Complaint Escalation\n\nCustomer complaints must be escalated to Compliance within one business day.",
+      },
+      {
+        id: "d",
+        title: "Complaint Escalation Procedure",
+        source: "manual://d",
+        text: "Complaint Escalation Workflow\n\nStep 1 escalate customer complaints to Compliance within one business day. Step 2 archive the escalation record.",
+      },
+    ],
+    0.35
+  );
+
+  const blockedGroup = blockedResult.requirementGroups[0];
+  const blockedRedline = buildRequirementRedlineModel(blockedResult, blockedGroup);
+  assert.equal(blockedRedline.autoRedlineStatus, "blocked");
 });

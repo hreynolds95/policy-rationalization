@@ -6,10 +6,11 @@ import {
   normalizeGoogleExportUrl,
   parseCsv,
 } from "./analysis.mjs";
+import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 3:03 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 5:52 PM EDT";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
@@ -42,7 +43,7 @@ const WIZARD_ROUTES = [
     hash: "#/groups",
     step: "Step 3",
     title: "Review requirement mapping",
-    subtitle: "Review requirement-to-requirement matches, 1:1 conflicts, and hierarchy watch-outs.",
+    subtitle: "Review requirement-to-requirement matches, 1:1 conflicts, hierarchy watch-outs, and redline previews.",
   },
   {
     id: "details",
@@ -95,6 +96,10 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function encodeUrlParam(value) {
+  return encodeURIComponent(String(value ?? ""));
 }
 
 function pluralize(count, singular, plural = `${singular}s`) {
@@ -849,7 +854,7 @@ function buildGroupsStepMarkup() {
       <section class="panel table-panel">
         <div class="step-card-header">
           <h3>Requirement mapping groups</h3>
-          <p class="section-subtitle">Review cross-document requirement matches, 1:1 mapping conflicts, and hierarchy watch-outs.</p>
+          <p class="section-subtitle">Review cross-document requirement matches, 1:1 mapping conflicts, hierarchy watch-outs, and inline redline proposals.</p>
         </div>
         <div class="results-section">${groupsHtml}</div>
       </section>
@@ -1368,6 +1373,151 @@ function buildRequirementInventoryMarkup(documents) {
     .join("");
 }
 
+function buildStandaloneRedlineUrl(currentText, proposedText) {
+  return `./version-compare/?a=${encodeUrlParam(currentText)}&b=${encodeUrlParam(proposedText)}&autorun=1`;
+}
+
+function scoreRequirementForProposal(requirement, primary) {
+  let score = requirement.requirementText.length;
+  if (requirement.hierarchyReview.scopeStatus === "in-scope") {
+    score += 200;
+  }
+  if (requirement.hierarchyReview.alignment === "aligned") {
+    score += 75;
+  } else if (requirement.hierarchyReview.alignment === "review") {
+    score += 20;
+  }
+  if (requirement.sourceDocumentType === primary.sourceDocumentType) {
+    score += 25;
+  }
+  return score;
+}
+
+export function buildRequirementRedlineModel(result, group) {
+  const requirements = group.requirementIds
+    .map((id) => result.requirements.find((requirement) => requirement.requirementId === id))
+    .filter(Boolean);
+  const primary = result.requirements.find(
+    (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
+  );
+
+  if (!primary) {
+    return null;
+  }
+
+  const rankedCandidates = [...requirements].sort(
+    (left, right) => scoreRequirementForProposal(right, primary) - scoreRequirementForProposal(left, primary)
+  );
+  const strongestInScopeCandidate =
+    rankedCandidates.find((requirement) => requirement.hierarchyReview.scopeStatus === "in-scope") || primary;
+
+  let proposedText = strongestInScopeCandidate.requirementText;
+  let autoRedlineStatus = "ready";
+  let reviewNote =
+    "Proposed text is based on the strongest in-scope requirement wording in this mapping group.";
+
+  if (group.checks.scopeStatus === "contains-out-of-scope" || group.checks.hierarchyRelationship === "policy-to-procedure-gap") {
+    proposedText = primary.requirementText;
+    autoRedlineStatus = "blocked";
+    reviewNote =
+      "Automatic redline is blocked because this mapping includes procedure content or a direct policy-to-procedure hierarchy gap.";
+  } else if (group.checks.oneToOneMappingStatus === "conflict") {
+    autoRedlineStatus = "caution";
+    reviewNote =
+      "Automatic redline is advisory only because multiple requirements from the same source document map into this group.";
+  } else if (strongestInScopeCandidate.requirementId === primary.requirementId) {
+    reviewNote =
+      "No stronger in-scope wording displaced the canonical requirement, so this is mostly a deduplication decision rather than a text rewrite.";
+  }
+
+  const compareResult = runRedlineCompare(primary.requirementText, proposedText, {
+    original_label: `${primary.sourceDocumentTitle} current canonical text`,
+    updated_label: "Proposed consolidated requirement",
+  });
+
+  return {
+    primary,
+    proposedText,
+    compareResult,
+    autoRedlineStatus,
+    reviewNote,
+    standaloneUrl: buildStandaloneRedlineUrl(primary.requirementText, proposedText),
+  };
+}
+
+function buildInlineDiffHtml(segments) {
+  return segments
+    .map((segment) => {
+      const className =
+        segment.type === "add"
+          ? "redline-token redline-token--add"
+          : segment.type === "remove"
+            ? "redline-token redline-token--remove"
+            : "redline-token";
+      return `<span class="${className}">${escapeHtml(segment.text)}</span>`;
+    })
+    .join("");
+}
+
+function buildSideBySideDiffHtml(rows) {
+  return `
+    <div class="redline-side-table">
+      <table>
+        <thead>
+          <tr><th>Current</th><th>Proposed</th></tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((row) => `
+              <tr>
+                <td class="${row.type === "remove" || row.type === "replace" ? "removed-cell" : ""}">${escapeHtml(row.left || "")}</td>
+                <td class="${row.type === "add" || row.type === "replace" ? "added-cell" : ""}">${escapeHtml(row.right || "")}</td>
+              </tr>
+            `)
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildRequirementRedlineMarkup(result, group) {
+  const model = buildRequirementRedlineModel(result, group);
+  if (!model) {
+    return "";
+  }
+
+  const summary = model.compareResult.summary;
+  return `
+    <details class="redline-disclosure">
+      <summary>Open redline preview</summary>
+      <div class="redline-preview">
+        <div class="redline-preview__meta">
+          <span class="doc-badge ${model.autoRedlineStatus === "ready" ? "doc-badge--ok" : "doc-badge--warn"}">
+            ${model.autoRedlineStatus === "ready" ? "Auto redline ready" : model.autoRedlineStatus === "caution" ? "Advisory redline" : "Auto redline blocked"}
+          </span>
+          <span class="doc-badge">Added ${summary.added_words}</span>
+          <span class="doc-badge">Removed ${summary.removed_words}</span>
+          <a class="ghost-button ghost-button--small" href="${model.standaloneUrl}">Open standalone compare</a>
+        </div>
+        <p class="document-note">${escapeHtml(model.reviewNote)}</p>
+        <div class="redline-copy-grid">
+          <div class="redline-copy-card">
+            <h5>Current canonical text</h5>
+            <p>${escapeHtml(model.primary.requirementText)}</p>
+          </div>
+          <div class="redline-copy-card">
+            <h5>Proposed consolidated text</h5>
+            <p>${escapeHtml(model.proposedText)}</p>
+          </div>
+        </div>
+        <div class="redline-inline-box">${buildInlineDiffHtml(model.compareResult.segments)}</div>
+        ${buildSideBySideDiffHtml(model.compareResult.side_by_side)}
+      </div>
+    </details>
+  `;
+}
+
 function buildRequirementGroupMarkup(result, groups) {
   if (!groups.length) {
     return `<article class="result-card"><p>No cross-document requirement mapping groups were found at the current threshold.</p></article>`;
@@ -1414,6 +1564,7 @@ function buildRequirementGroupMarkup(result, groups) {
             .join("")}
         </div>
         ${group.checks.hierarchyIssues?.length ? `<p class="document-note">${group.checks.hierarchyIssues.join("; ")}</p>` : ""}
+        ${buildRequirementRedlineMarkup(result, group)}
         <ul class="requirement-list">
           ${requirements.map((requirement) => `
             <li class="requirement-row">
@@ -1748,6 +1899,7 @@ export function buildExportPayload(result, issues, rawQuery, filter, threshold =
     filter,
     summary: buildSummary(result),
     strongestCanonicalTitle: strongestCanonicalRequirement?.sourceDocumentTitle || "None",
+    sourceResult: result,
     filtered,
   };
 }
@@ -1777,6 +1929,8 @@ export function buildCsvExport(payload) {
       "group_review_status",
       "canonical_document",
       "canonical_requirement_text",
+      "redline_status",
+      "proposed_requirement_text",
       "requirement_text",
     ],
   ];
@@ -1792,9 +1946,10 @@ export function buildCsvExport(payload) {
     const group = groupByRequirementId.get(requirement.requirementId);
     const primaryRequirement = group
       ? group.requirementIds
-          .map((id) => payload.filtered.requirements.find((candidate) => candidate.requirementId === id))
+          .map((id) => payload.sourceResult.requirements.find((candidate) => candidate.requirementId === id))
           .find((candidate) => candidate?.requirementId === group.recommendedPrimaryRequirementId)
       : null;
+    const redline = group ? buildRequirementRedlineModel(payload.sourceResult, group) : null;
     rows.push([
       requirement.sourceDocumentTitle,
       payload.filtered.documents.find((document) => document.id === requirement.documentId)?.source || "",
@@ -1810,6 +1965,8 @@ export function buildCsvExport(payload) {
       group?.checks?.hierarchyReviewStatus || "",
       primaryRequirement?.sourceDocumentTitle || "",
       primaryRequirement?.requirementText || "",
+      redline?.autoRedlineStatus || "",
+      redline?.proposedText || "",
       requirement.requirementText,
     ]);
   }
@@ -1870,12 +2027,15 @@ export function buildMarkdownExport(payload) {
       const primaryRequirement = groupRequirements.find(
         (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
       );
+      const redline = buildRequirementRedlineModel(payload.sourceResult, group);
       lines.push(`### Group ${index + 1}`);
       lines.push("");
       lines.push(`- Recommendation bucket: Quick win`);
       lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
       lines.push(`- Canonical source: ${primaryRequirement?.sourceDocumentTitle || "Unknown"}`);
       lines.push(`- Canonical requirement: ${primaryRequirement?.requirementText || "Unknown"}`);
+      lines.push(`- Redline status: ${redline?.autoRedlineStatus || "unknown"}`);
+      lines.push(`- Proposed consolidated text: ${redline?.proposedText || primaryRequirement?.requirementText || "Unknown"}`);
       lines.push(`- Recommendation: ${group.recommendation}`);
       lines.push(`- Checks: ${Object.entries(group.checks).map(([label, value]) => `${formatLabel(label)} = ${value}`).join("; ")}`);
       lines.push("- Requirements:");
@@ -1901,12 +2061,15 @@ export function buildMarkdownExport(payload) {
       const primaryRequirement = groupRequirements.find(
         (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
       );
+      const redline = buildRequirementRedlineModel(payload.sourceResult, group);
       lines.push(`### Group ${index + 1}`);
       lines.push("");
       lines.push(`- Recommendation bucket: Material change`);
       lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
       lines.push(`- Canonical source: ${primaryRequirement?.sourceDocumentTitle || "Unknown"}`);
       lines.push(`- Canonical requirement: ${primaryRequirement?.requirementText || "Unknown"}`);
+      lines.push(`- Redline status: ${redline?.autoRedlineStatus || "unknown"}`);
+      lines.push(`- Proposed consolidated text: ${redline?.proposedText || primaryRequirement?.requirementText || "Unknown"}`);
       lines.push(`- Recommendation: ${group.recommendation}`);
       lines.push(`- Checks: ${Object.entries(group.checks).map(([label, value]) => `${formatLabel(label)} = ${value}`).join("; ")}`);
       lines.push("- Requirements:");

@@ -441,6 +441,10 @@ button:hover,
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--ink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ghost-button:hover {
@@ -866,6 +870,120 @@ button:hover,
   margin: 10px 0 0;
   color: var(--accent-2);
   line-height: 1.5;
+}
+
+.redline-disclosure {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.redline-disclosure summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  color: var(--accent-2);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.redline-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.redline-preview {
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.redline-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.redline-copy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.redline-copy-card {
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.redline-copy-card h5 {
+  margin: 0 0 8px;
+  font-size: 0.76rem;
+  color: var(--accent-2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.redline-copy-card p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.redline-inline-box {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: #101216;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.redline-token--add {
+  background: rgba(255, 107, 107, 0.18);
+  color: #ffc7c7;
+}
+
+.redline-token--remove {
+  background: rgba(255, 107, 107, 0.14);
+  color: #ffaaaa;
+  text-decoration: line-through;
+}
+
+.redline-side-table {
+  overflow-x: auto;
+}
+
+.redline-side-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.redline-side-table th,
+.redline-side-table td {
+  border: 1px solid var(--line);
+  padding: 8px;
+  vertical-align: top;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.redline-side-table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--accent-2);
+}
+
+.removed-cell {
+  background: rgba(255, 107, 107, 0.12);
+  color: #ffb6b6;
+}
+
+.added-cell {
+  background: rgba(163, 215, 149, 0.1);
+  color: #d9f1d2;
 }
 
 .bucket-stack {
@@ -1671,6 +1789,10 @@ button:hover,
 }
 
 @media (max-width: 720px) {
+  .redline-copy-grid {
+    grid-template-columns: 1fr;
+  }
+
   .wizard-progress-shell,
   .wizard-status-shell,
   .wizard-content-shell {

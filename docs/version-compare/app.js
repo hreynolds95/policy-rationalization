@@ -1,3 +1,11 @@
+import {
+  buildSideBySide,
+  myersDiff,
+  mergeSegments,
+  runRedlineCompare,
+  tokenizeWords,
+} from "../redline.mjs";
+
 const modeButtons = [...document.querySelectorAll('.mode-btn')];
 const panels = {
   text: document.getElementById('panel-text'),
@@ -236,144 +244,6 @@ toggleSideBtn?.addEventListener('click', () => {
   setStatus('done');
 });
 
-function tokenizeWords(text) {
-  return text.match(/\s+|[^\s]+/g) || [];
-}
-
-function myersDiff(a, b) {
-  const n = a.length;
-  const m = b.length;
-  const max = n + m;
-  const trace = [];
-  let v = new Map();
-  v.set(1, 0);
-
-  for (let d = 0; d <= max; d += 1) {
-    const current = new Map(v);
-    trace.push(current);
-
-    for (let k = -d; k <= d; k += 2) {
-      const vKMinus = v.get(k - 1);
-      const vKPlus = v.get(k + 1);
-
-      let x;
-      if (k === -d || (k !== d && (vKMinus ?? -Infinity) < (vKPlus ?? -Infinity))) {
-        x = vKPlus ?? 0;
-      } else {
-        x = (vKMinus ?? 0) + 1;
-      }
-
-      let y = x - k;
-      while (x < n && y < m && a[x] === b[y]) {
-        x += 1;
-        y += 1;
-      }
-
-      v.set(k, x);
-      if (x >= n && y >= m) {
-        return backtrack(trace, a, b);
-      }
-    }
-  }
-
-  return [];
-}
-
-function backtrack(trace, a, b) {
-  let x = a.length;
-  let y = b.length;
-  const ops = [];
-
-  for (let d = trace.length - 1; d >= 0; d -= 1) {
-    const v = trace[d];
-    const k = x - y;
-
-    let prevK;
-    const vKMinus = v.get(k - 1);
-    const vKPlus = v.get(k + 1);
-    if (k === -d || (k !== d && (vKMinus ?? -Infinity) < (vKPlus ?? -Infinity))) {
-      prevK = k + 1;
-    } else {
-      prevK = k - 1;
-    }
-
-    const prevX = v.get(prevK) ?? 0;
-    const prevY = prevX - prevK;
-
-    while (x > prevX && y > prevY) {
-      ops.push({ type: 'equal', value: a[x - 1] });
-      x -= 1;
-      y -= 1;
-    }
-
-    if (d === 0) break;
-
-    if (x === prevX) {
-      ops.push({ type: 'add', value: b[y - 1] });
-      y -= 1;
-    } else {
-      ops.push({ type: 'remove', value: a[x - 1] });
-      x -= 1;
-    }
-  }
-
-  ops.reverse();
-  return ops;
-}
-
-function mergeSegments(ops) {
-  const out = [];
-  for (const op of ops) {
-    const last = out[out.length - 1];
-    if (last && last.type === op.type) {
-      last.text += op.value;
-    } else {
-      out.push({ type: op.type, text: op.value });
-    }
-  }
-  return out;
-}
-
-function buildSideBySide(oldText, newText) {
-  const oldLines = oldText.split(/\r?\n/);
-  const newLines = newText.split(/\r?\n/);
-  const ops = myersDiff(oldLines, newLines);
-
-  const rows = [];
-  let i = 0;
-
-  while (i < ops.length) {
-    const op = ops[i];
-    if (op.type === 'equal') {
-      rows.push({ type: 'equal', left: op.value, right: op.value });
-      i += 1;
-      continue;
-    }
-
-    const removed = [];
-    const added = [];
-
-    while (i < ops.length && ops[i].type !== 'equal') {
-      if (ops[i].type === 'remove') removed.push(ops[i].value);
-      if (ops[i].type === 'add') added.push(ops[i].value);
-      i += 1;
-    }
-
-    const max = Math.max(removed.length, added.length);
-    for (let idx = 0; idx < max; idx += 1) {
-      const left = removed[idx] || '';
-      const right = added[idx] || '';
-      let type = 'equal';
-      if (left && right) type = 'replace';
-      else if (left) type = 'remove';
-      else if (right) type = 'add';
-      rows.push({ type, left, right });
-    }
-  }
-
-  return rows;
-}
-
 function ensureSideBySide(result) {
   if (!result) return [];
   if (Array.isArray(result.side_by_side)) return result.side_by_side;
@@ -382,30 +252,6 @@ function ensureSideBySide(result) {
   const right = result.raw?.textB ?? '';
   result.side_by_side = buildSideBySide(left, right);
   return result.side_by_side;
-}
-
-function countWords(text) {
-  return (text.match(/\S+/g) || []).length;
-}
-
-function summarize(oldText, newText, segments) {
-  const addedWords = segments
-    .filter((s) => s.type === 'add')
-    .reduce((acc, s) => acc + countWords(s.text), 0);
-  const removedWords = segments
-    .filter((s) => s.type === 'remove')
-    .reduce((acc, s) => acc + countWords(s.text), 0);
-
-  const oldCount = countWords(oldText);
-  const newCount = countWords(newText);
-
-  return {
-    original_word_count: oldCount,
-    updated_word_count: newCount,
-    added_words: addedWords,
-    removed_words: removedWords,
-    net_word_change: newCount - oldCount,
-  };
 }
 
 function renderSummary(summary) {
@@ -553,21 +399,6 @@ async function getInputsByMode() {
   }
 
   throw new Error('Invalid mode.');
-}
-
-function runCompare(textA, textB, source) {
-  const tokenOps = myersDiff(tokenizeWords(textA), tokenizeWords(textB));
-  const segments = mergeSegments(tokenOps);
-  const summary = summarize(textA, textB, segments);
-
-  return {
-    summary,
-    segments,
-    side_by_side: null,
-    raw: { textA, textB },
-    source,
-    generated_at_utc: new Date().toISOString(),
-  };
 }
 
 function escapeHtml(raw) {
@@ -896,7 +727,7 @@ async function downloadPdfReport() {
   setStatus('done', 'PDF report downloaded');
 }
 
-compareBtn.addEventListener('click', async () => {
+async function compareCurrentInputs() {
   setStatus('comparing');
   resultsEl.classList.add('hidden');
   setExportEnabled(false);
@@ -905,7 +736,7 @@ compareBtn.addEventListener('click', async () => {
 
   try {
     const { textA, textB, source } = await getInputsByMode();
-    const result = runCompare(textA, textB, source);
+    const result = runRedlineCompare(textA, textB, source);
     lastResult = result;
 
     renderSummary(result.summary);
@@ -925,7 +756,9 @@ compareBtn.addEventListener('click', async () => {
       setStatus('error', detail);
     }
   }
-});
+}
+
+compareBtn.addEventListener('click', compareCurrentInputs);
 
 loadSampleBtn.addEventListener('click', () => {
   setMode('text');
@@ -937,3 +770,24 @@ loadSampleBtn.addEventListener('click', () => {
 
 downloadHtmlBtn.addEventListener('click', downloadHtmlReport);
 downloadPdfBtn.addEventListener('click', downloadPdfReport);
+
+function hydrateFromQueryParams() {
+  const params = new URLSearchParams(window.location.search);
+  const originalText = params.get('a');
+  const updatedText = params.get('b');
+  if (!originalText || !updatedText) {
+    return;
+  }
+
+  setMode('text');
+  clearComparisonState();
+  document.getElementById('text-a').value = originalText;
+  document.getElementById('text-b').value = updatedText;
+  setStatus('ready', 'redline loaded');
+
+  if (params.get('autorun') === '1') {
+    compareCurrentInputs();
+  }
+}
+
+hydrateFromQueryParams();
