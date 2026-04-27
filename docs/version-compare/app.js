@@ -40,9 +40,21 @@ Owner: Alex Rivera
 4. Share with team on Thursday
 5. Publish to Blockcell`;
 
-function setStatus(message, isError = false) {
-  statusEl.textContent = message;
-  statusEl.className = `status ${isError ? 'error' : 'ok'}`;
+function setStatus(state = 'ready', detail = '') {
+  const labels = {
+    ready: 'Ready',
+    comparing: 'Comparing…',
+    done: 'Done',
+    needs_input: 'Needs input',
+    error: 'Error',
+  };
+
+  const label = labels[state] || labels.ready;
+  const cleanDetail = String(detail || '').replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+  statusEl.textContent = cleanDetail ? `${label}: ${cleanDetail}` : label;
+
+  const tone = state === 'done' ? 'ok' : state === 'needs_input' || state === 'error' ? 'error' : 'neutral';
+  statusEl.className = `status ${tone}`;
 }
 
 function setExportEnabled(enabled) {
@@ -83,6 +95,7 @@ modeButtons.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dat
 setMode(activeMode);
 setExportEnabled(false);
 resetResultPanels();
+setStatus('ready');
 
 toggleInlineBtn?.addEventListener('click', () => {
   const isVisible = !inlineSectionEl.classList.contains('hidden');
@@ -517,23 +530,23 @@ function downloadBlob(filename, blob) {
 
 function downloadHtmlReport() {
   if (!lastResult) {
-    setStatus('No comparison result to export.', true);
+    setStatus('needs_input', 'run compare first');
     return;
   }
 
   const html = buildReportHtml(lastResult);
   const name = `version-compare-report-${new Date().toISOString().replaceAll(':', '-')}.html`;
   downloadBlob(name, new Blob([html], { type: 'text/html;charset=utf-8' }));
-  setStatus('HTML report downloaded.');
+  setStatus('done', 'HTML report downloaded');
 }
 
 function downloadPdfReport() {
   if (!lastResult) {
-    setStatus('No comparison result to export.', true);
+    setStatus('needs_input', 'run compare first');
     return;
   }
   if (!window.jspdf || !window.jspdf.jsPDF) {
-    setStatus('PDF library not loaded. Refresh and try again.', true);
+    setStatus('error', 'PDF library not loaded. Refresh and try again');
     return;
   }
 
@@ -744,11 +757,11 @@ function downloadPdfReport() {
 
   const name = `version-compare-report-${new Date().toISOString().replaceAll(':', '-')}.pdf`;
   pdf.save(name);
-  setStatus('PDF report downloaded.');
+  setStatus('done', 'PDF report downloaded');
 }
 
 compareBtn.addEventListener('click', async () => {
-  setStatus('Comparing...');
+  setStatus('comparing');
   resultsEl.classList.add('hidden');
   setExportEnabled(false);
   resetResultPanels();
@@ -764,10 +777,15 @@ compareBtn.addEventListener('click', async () => {
 
     setExportEnabled(true);
     resultsEl.classList.remove('hidden');
-    setStatus('Comparison complete.');
+    setStatus('done');
   } catch (error) {
     setExportEnabled(false);
-    setStatus(error.message || 'Comparison failed.', true);
+    const detail = String(error?.message || 'Comparison failed').replace(/\s+/g, ' ').trim();
+    if (/\brequired\b/i.test(detail)) {
+      setStatus('needs_input', detail);
+    } else {
+      setStatus('error', detail);
+    }
   }
 });
 
@@ -775,7 +793,7 @@ loadSampleBtn.addEventListener('click', () => {
   setMode('text');
   document.getElementById('text-a').value = SAMPLE_TEXT_A;
   document.getElementById('text-b').value = SAMPLE_TEXT_B;
-  setStatus('Sample content loaded. Click Compare.');
+  setStatus('ready', 'sample loaded');
 });
 
 downloadHtmlBtn.addEventListener('click', downloadHtmlReport);

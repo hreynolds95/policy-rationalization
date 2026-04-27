@@ -229,6 +229,10 @@ button:disabled {
   font-weight: 700;
 }
 
+.status.neutral {
+  color: #b9b9b9;
+}
+
 .status.ok {
   color: var(--ok);
 }
