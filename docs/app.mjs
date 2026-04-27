@@ -636,7 +636,7 @@ function buildSourceHelpMarkup() {
       <div class="help-disclosure__body">
         <ul class="help-disclosure__list">
           <li><strong>URLs:</strong> best for public Google exports or web pages that can be fetched directly in the browser.</li>
-          <li><strong>Files:</strong> best for exported `.txt`, `.md`, or `.csv` source material when a document is private or blocked.</li>
+          <li><strong>Files:</strong> best for exported TXT, MD, or CSV source material when a document is private or blocked.</li>
           <li><strong>Manual:</strong> best for quick copy/paste review or small excerpts you want to compare immediately.</li>
         </ul>
       </div>
