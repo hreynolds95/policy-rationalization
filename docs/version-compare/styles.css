@@ -1,0 +1,263 @@
+:root {
+  --bg: #050505;
+  --bg-soft: #121212;
+  --card: #0b0b0c;
+  --ink: #f5f5f5;
+  --muted: #cfcfcf;
+  --brand: #ffffff;
+  --brand-2: #1c1c1c;
+  --border: #2f2f2f;
+  --ok: #9ce5b2;
+  --error: #ffb3b3;
+  --add-bg: rgba(34, 197, 94, 0.22);
+  --add-ink: #b7f8cb;
+  --remove-bg: rgba(239, 68, 68, 0.22);
+  --remove-ink: #ffc4c4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 10% 10%, #1b1b1b, var(--bg));
+}
+
+.shell {
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.card {
+  width: min(1040px, 100%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.header h1 {
+  margin: 0;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+.header p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.help-disclosure {
+  margin: 0.9rem 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #111;
+}
+
+.help-disclosure summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.75rem 0.85rem;
+  color: #e8e8e8;
+  font-weight: 700;
+}
+
+.help-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-disclosure__body {
+  padding: 0 0.9rem 0.85rem;
+  color: #d0d0d0;
+  font-size: 0.95rem;
+}
+
+.help-disclosure__body ol {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.help-disclosure__body p {
+  margin: 0.7rem 0 0;
+  color: #bbbbbb;
+}
+
+.mode-picker {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
+}
+
+.mode-btn {
+  border: 1px solid var(--border);
+  background: #121212;
+  color: #efefef;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.mode-btn.active {
+  background: var(--brand);
+  color: #000;
+  border-color: var(--brand);
+}
+
+.mode-panel {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hidden {
+  display: none;
+}
+
+label {
+  margin-top: 0.3rem;
+  font-weight: 600;
+}
+
+textarea,
+input[type="url"],
+input[type="file"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.98rem;
+}
+
+textarea::placeholder,
+input[type="url"]::placeholder {
+  color: #9f9f9f;
+}
+
+.actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.primary {
+  background: var(--brand);
+  color: #000;
+}
+
+.secondary {
+  background: var(--brand-2);
+  color: #f3f3f3;
+}
+
+.ghost {
+  background: #141414;
+  color: #eaeaea;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 0.9rem;
+  font-weight: 700;
+}
+
+.status.ok {
+  color: var(--ok);
+}
+
+.status.error {
+  color: var(--error);
+}
+
+.results {
+  margin-top: 1.1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+#summary-list {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.legend {
+  display: flex;
+  gap: 0.7rem;
+}
+
+.inline-diff {
+  margin-top: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0f0f0f;
+  padding: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.added,
+.added-cell {
+  background: var(--add-bg);
+  color: var(--add-ink);
+}
+
+.removed,
+.removed-cell {
+  background: var(--remove-bg);
+  color: var(--remove-ink);
+  text-decoration: line-through;
+}
+
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border: 1px solid var(--border);
+  padding: 0.55rem;
+  vertical-align: top;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+th {
+  background: #151515;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+@media (max-width: 720px) {
+  .card {
+    padding: 1rem;
+  }
+}

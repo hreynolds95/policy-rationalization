@@ -1,0 +1,730 @@
+const modeButtons = [...document.querySelectorAll('.mode-btn')];
+const panels = {
+  text: document.getElementById('panel-text'),
+  files: document.getElementById('panel-files'),
+  urls: document.getElementById('panel-urls'),
+};
+
+const compareBtn = document.getElementById('compare-btn');
+const loadSampleBtn = document.getElementById('load-sample');
+const downloadHtmlBtn = document.getElementById('download-html');
+const downloadPdfBtn = document.getElementById('download-pdf');
+const statusEl = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+const summaryListEl = document.getElementById('summary-list');
+const inlineDiffEl = document.getElementById('inline-diff');
+const sideBodyEl = document.getElementById('side-body');
+
+let activeMode = 'text';
+let lastResult = null;
+
+const SAMPLE_TEXT_A = `Project Launch Plan
+Owner: Alex
+
+1. Build the version compare UI
+2. Add diff summary
+3. Review with design
+4. Share with team on Friday`;
+
+const SAMPLE_TEXT_B = `Project Launch Plan
+Owner: Alex Rivera
+
+1. Build the version compare UI
+2. Add summary and side-by-side diff
+3. Review with design and security
+4. Share with team on Thursday
+5. Publish to Blockcell`;
+
+function setStatus(message, isError = false) {
+  statusEl.textContent = message;
+  statusEl.className = `status ${isError ? 'error' : 'ok'}`;
+}
+
+function setMode(mode) {
+  activeMode = mode;
+  modeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.mode === mode));
+  Object.entries(panels).forEach(([name, panel]) => panel.classList.toggle('hidden', name !== mode));
+}
+
+modeButtons.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+
+function tokenizeWords(text) {
+  return text.match(/\s+|[^\s]+/g) || [];
+}
+
+function myersDiff(a, b) {
+  const n = a.length;
+  const m = b.length;
+  const max = n + m;
+  const trace = [];
+  let v = new Map();
+  v.set(1, 0);
+
+  for (let d = 0; d <= max; d += 1) {
+    const current = new Map(v);
+    trace.push(current);
+
+    for (let k = -d; k <= d; k += 2) {
+      const vKMinus = v.get(k - 1);
+      const vKPlus = v.get(k + 1);
+
+      let x;
+      if (k === -d || (k !== d && (vKMinus ?? -Infinity) < (vKPlus ?? -Infinity))) {
+        x = vKPlus ?? 0;
+      } else {
+        x = (vKMinus ?? 0) + 1;
+      }
+
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) {
+        x += 1;
+        y += 1;
+      }
+
+      v.set(k, x);
+      if (x >= n && y >= m) {
+        return backtrack(trace, a, b);
+      }
+    }
+  }
+
+  return [];
+}
+
+function backtrack(trace, a, b) {
+  let x = a.length;
+  let y = b.length;
+  const ops = [];
+
+  for (let d = trace.length - 1; d >= 0; d -= 1) {
+    const v = trace[d];
+    const k = x - y;
+
+    let prevK;
+    const vKMinus = v.get(k - 1);
+    const vKPlus = v.get(k + 1);
+    if (k === -d || (k !== d && (vKMinus ?? -Infinity) < (vKPlus ?? -Infinity))) {
+      prevK = k + 1;
+    } else {
+      prevK = k - 1;
+    }
+
+    const prevX = v.get(prevK) ?? 0;
+    const prevY = prevX - prevK;
+
+    while (x > prevX && y > prevY) {
+      ops.push({ type: 'equal', value: a[x - 1] });
+      x -= 1;
+      y -= 1;
+    }
+
+    if (d === 0) break;
+
+    if (x === prevX) {
+      ops.push({ type: 'add', value: b[y - 1] });
+      y -= 1;
+    } else {
+      ops.push({ type: 'remove', value: a[x - 1] });
+      x -= 1;
+    }
+  }
+
+  ops.reverse();
+  return ops;
+}
+
+function mergeSegments(ops) {
+  const out = [];
+  for (const op of ops) {
+    const last = out[out.length - 1];
+    if (last && last.type === op.type) {
+      last.text += op.value;
+    } else {
+      out.push({ type: op.type, text: op.value });
+    }
+  }
+  return out;
+}
+
+function buildSideBySide(oldText, newText) {
+  const oldLines = oldText.split(/\r?\n/);
+  const newLines = newText.split(/\r?\n/);
+  const ops = myersDiff(oldLines, newLines);
+
+  const rows = [];
+  let i = 0;
+
+  while (i < ops.length) {
+    const op = ops[i];
+    if (op.type === 'equal') {
+      rows.push({ type: 'equal', left: op.value, right: op.value });
+      i += 1;
+      continue;
+    }
+
+    const removed = [];
+    const added = [];
+
+    while (i < ops.length && ops[i].type !== 'equal') {
+      if (ops[i].type === 'remove') removed.push(ops[i].value);
+      if (ops[i].type === 'add') added.push(ops[i].value);
+      i += 1;
+    }
+
+    const max = Math.max(removed.length, added.length);
+    for (let idx = 0; idx < max; idx += 1) {
+      const left = removed[idx] || '';
+      const right = added[idx] || '';
+      let type = 'equal';
+      if (left && right) type = 'replace';
+      else if (left) type = 'remove';
+      else if (right) type = 'add';
+      rows.push({ type, left, right });
+    }
+  }
+
+  return rows;
+}
+
+function countWords(text) {
+  return (text.match(/\S+/g) || []).length;
+}
+
+function summarize(oldText, newText, segments) {
+  const addedWords = segments
+    .filter((s) => s.type === 'add')
+    .reduce((acc, s) => acc + countWords(s.text), 0);
+  const removedWords = segments
+    .filter((s) => s.type === 'remove')
+    .reduce((acc, s) => acc + countWords(s.text), 0);
+
+  const oldCount = countWords(oldText);
+  const newCount = countWords(newText);
+
+  return {
+    original_word_count: oldCount,
+    updated_word_count: newCount,
+    added_words: addedWords,
+    removed_words: removedWords,
+    net_word_change: newCount - oldCount,
+  };
+}
+
+function renderSummary(summary) {
+  const rows = [
+    ['Original word count', summary.original_word_count],
+    ['Updated word count', summary.updated_word_count],
+    ['Words added', summary.added_words],
+    ['Words removed', summary.removed_words],
+    ['Net word change', summary.net_word_change],
+  ];
+
+  summaryListEl.innerHTML = '';
+  for (const [label, value] of rows) {
+    const li = document.createElement('li');
+    li.textContent = `${label}: ${value}`;
+    summaryListEl.appendChild(li);
+  }
+}
+
+function renderInlineDiff(segments) {
+  inlineDiffEl.innerHTML = '';
+  for (const segment of segments) {
+    const span = document.createElement('span');
+    span.textContent = segment.text;
+    if (segment.type === 'add') span.className = 'added';
+    if (segment.type === 'remove') span.className = 'removed';
+    inlineDiffEl.appendChild(span);
+  }
+}
+
+function renderSideBySide(rows) {
+  sideBodyEl.innerHTML = '';
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    const left = document.createElement('td');
+    const right = document.createElement('td');
+
+    left.textContent = row.left || '';
+    right.textContent = row.right || '';
+
+    if (row.type === 'remove' || row.type === 'replace') left.classList.add('removed-cell');
+    if (row.type === 'add' || row.type === 'replace') right.classList.add('added-cell');
+
+    tr.appendChild(left);
+    tr.appendChild(right);
+    sideBodyEl.appendChild(tr);
+  }
+}
+
+async function extractPdfText(arrayBuffer) {
+  if (!window.pdfjsLib) {
+    throw new Error('PDF parser not loaded. Refresh and try again.');
+  }
+
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item) => item.str).join(' '));
+  }
+
+  return pages.join('\n');
+}
+
+async function readLocalFile(file) {
+  if (!file) throw new Error('Both files are required.');
+  const buf = await file.arrayBuffer();
+
+  if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+    return extractPdfText(buf);
+  }
+
+  return new TextDecoder('utf-8', { fatal: false }).decode(buf);
+}
+
+function toGoogleDocExportUrl(url) {
+  const m = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+  if (!m) return null;
+  return `https://docs.google.com/document/d/${m[1]}/export?format=txt`;
+}
+
+async function fetchUrlText(url) {
+  const maybeDoc = toGoogleDocExportUrl(url);
+  const target = maybeDoc || url;
+
+  const response = await fetch(target, { method: 'GET', credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch URL (${response.status}).`);
+  }
+
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('application/pdf') || target.toLowerCase().endsWith('.pdf')) {
+    const buffer = await response.arrayBuffer();
+    return extractPdfText(buffer);
+  }
+
+  return await response.text();
+}
+
+async function getInputsByMode() {
+  if (activeMode === 'text') {
+    const textA = document.getElementById('text-a').value;
+    const textB = document.getElementById('text-b').value;
+    if (!textA.trim() || !textB.trim()) {
+      throw new Error('Both text fields are required.');
+    }
+    return {
+      textA,
+      textB,
+      source: { original_label: 'Pasted Text A', updated_label: 'Pasted Text B' },
+    };
+  }
+
+  if (activeMode === 'files') {
+    const fileA = document.getElementById('file-a').files[0];
+    const fileB = document.getElementById('file-b').files[0];
+    const textA = await readLocalFile(fileA);
+    const textB = await readLocalFile(fileB);
+    return {
+      textA,
+      textB,
+      source: {
+        original_label: `File: ${fileA?.name || ''}`,
+        updated_label: `File: ${fileB?.name || ''}`,
+      },
+    };
+  }
+
+  if (activeMode === 'urls') {
+    const urlA = document.getElementById('url-a').value.trim();
+    const urlB = document.getElementById('url-b').value.trim();
+    if (!urlA || !urlB) throw new Error('Both URLs are required.');
+
+    try {
+      const [textA, textB] = await Promise.all([fetchUrlText(urlA), fetchUrlText(urlB)]);
+      return {
+        textA,
+        textB,
+        source: { original_label: urlA, updated_label: urlB },
+      };
+    } catch (error) {
+      throw new Error(
+        `URL mode failed (${error.message}). This is usually CORS/auth. Use paste or files for private docs.`
+      );
+    }
+  }
+
+  throw new Error('Invalid mode.');
+}
+
+function runCompare(textA, textB, source) {
+  const tokenOps = myersDiff(tokenizeWords(textA), tokenizeWords(textB));
+  const segments = mergeSegments(tokenOps);
+  const sideBySide = buildSideBySide(textA, textB);
+  const summary = summarize(textA, textB, segments);
+
+  return {
+    summary,
+    segments,
+    side_by_side: sideBySide,
+    source,
+    generated_at_utc: new Date().toISOString(),
+  };
+}
+
+function escapeHtml(raw) {
+  return String(raw)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function buildReportHtml(data) {
+  const summary = data.summary || {};
+  const source = data.source || {};
+
+  const summaryRows = [
+    ['Original word count', summary.original_word_count],
+    ['Updated word count', summary.updated_word_count],
+    ['Words added', summary.added_words],
+    ['Words removed', summary.removed_words],
+    ['Net word change', summary.net_word_change],
+  ];
+
+  const summaryHtml = summaryRows
+    .map(([k, v]) => `<li><strong>${escapeHtml(k)}:</strong> ${escapeHtml(v)}</li>`)
+    .join('');
+
+  const inlineHtml = (data.segments || [])
+    .map((s) => {
+      const cls = s.type === 'add' ? 'added' : s.type === 'remove' ? 'removed' : '';
+      return `<span class="${cls}">${escapeHtml(s.text || '')}</span>`;
+    })
+    .join('');
+
+  const sideRows = (data.side_by_side || [])
+    .map((r) => {
+      const leftCls = r.type === 'remove' || r.type === 'replace' ? 'removed-cell' : '';
+      const rightCls = r.type === 'add' || r.type === 'replace' ? 'added-cell' : '';
+      return `<tr><td class="${leftCls}">${escapeHtml(r.left || '')}</td><td class="${rightCls}">${escapeHtml(r.right || '')}</td></tr>`;
+    })
+    .join('');
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Version Compare Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 0; color: #f5f5f5; background: radial-gradient(circle at 10% 10%, #1b1b1b, #050505); }
+.report { max-width: 1040px; margin: 20px auto; background: #0b0b0c; border: 1px solid #2f2f2f; border-radius: 14px; padding: 20px; }
+h1, h2 { color: #fff; }
+.meta { color: #d3d3d3; margin: 6px 0; }
+.diff { border: 1px solid #2f2f2f; border-radius: 8px; background: #0f0f0f; padding: 12px; white-space: pre-wrap; line-height: 1.5; }
+.added, .added-cell { background: rgba(34, 197, 94, 0.22); color: #b7f8cb; }
+.removed, .removed-cell { background: rgba(239, 68, 68, 0.22); color: #ffc4c4; text-decoration: line-through; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+th, td { border: 1px solid #2f2f2f; padding: 8px; vertical-align: top; white-space: pre-wrap; }
+th { background: #151515; color: #f5f5f5; text-align: left; }
+</style>
+</head>
+<body>
+<div class="report">
+<h1>Version Compare Report</h1>
+<div class="meta"><strong>Generated:</strong> ${escapeHtml(data.generated_at_utc || '')}</div>
+<div class="meta"><strong>Original Source:</strong> ${escapeHtml(source.original_label || '')}</div>
+<div class="meta"><strong>Updated Source:</strong> ${escapeHtml(source.updated_label || '')}</div>
+<h2>Summary</h2>
+<ul>${summaryHtml}</ul>
+<h2>Inline Diff</h2>
+<div class="diff">${inlineHtml}</div>
+<h2>Side-by-Side Diff</h2>
+<table><thead><tr><th>Original</th><th>Updated</th></tr></thead><tbody>${sideRows}</tbody></table>
+</div>
+</body>
+</html>`;
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadHtmlReport() {
+  if (!lastResult) {
+    setStatus('No comparison result to export.', true);
+    return;
+  }
+
+  const html = buildReportHtml(lastResult);
+  const name = `version-compare-report-${new Date().toISOString().replaceAll(':', '-')}.html`;
+  downloadBlob(name, new Blob([html], { type: 'text/html;charset=utf-8' }));
+  setStatus('HTML report downloaded.');
+}
+
+function downloadPdfReport() {
+  if (!lastResult) {
+    setStatus('No comparison result to export.', true);
+    return;
+  }
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    setStatus('PDF library not loaded. Refresh and try again.', true);
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const frame = { x: 20, y: 20, w: pageWidth - 40, h: pageHeight - 40 };
+  const contentX = frame.x + 18;
+  const contentW = frame.w - 36;
+  const contentBottom = frame.y + frame.h - 18;
+  const colGap = 10;
+  const colW = (contentW - colGap) / 2;
+
+  const palette = {
+    pageBg: [5, 5, 5],
+    cardBg: [11, 11, 12],
+    border: [47, 47, 47],
+    heading: [245, 245, 245],
+    text: [229, 229, 229],
+    muted: [189, 189, 189],
+    tableHeaderBg: [21, 21, 21],
+    addText: [183, 248, 203],
+    addBg: [25, 57, 39],
+    removeText: [255, 196, 196],
+    removeBg: [67, 28, 28],
+  };
+
+  let y = frame.y + 22;
+  let pageIndex = 0;
+
+  function paintPageFrame() {
+    pdf.setFillColor(...palette.pageBg);
+    pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+    pdf.setDrawColor(...palette.border);
+    pdf.setFillColor(...palette.cardBg);
+    pdf.roundedRect(frame.x, frame.y, frame.w, frame.h, 10, 10, 'FD');
+    y = frame.y + 22;
+  }
+
+  function newPage() {
+    if (pageIndex > 0) pdf.addPage();
+    pageIndex += 1;
+    paintPageFrame();
+  }
+
+  function ensureSpace(heightNeeded) {
+    if (y + heightNeeded > contentBottom) {
+      newPage();
+    }
+  }
+
+  function writeWrapped(text, opts = {}) {
+    const {
+      x = contentX,
+      width = contentW,
+      size = 10,
+      color = palette.text,
+      lineHeight = 12,
+      font = 'normal',
+    } = opts;
+
+    pdf.setFont('helvetica', font);
+    pdf.setFontSize(size);
+    pdf.setTextColor(...color);
+
+    const lines = pdf.splitTextToSize(String(text), width);
+    for (const line of lines) {
+      ensureSpace(lineHeight + 2);
+      pdf.text(line, x, y);
+      y += lineHeight;
+    }
+    return lines.length;
+  }
+
+  function sectionTitle(title) {
+    y += 4;
+    ensureSpace(20);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(13);
+    pdf.setTextColor(...palette.heading);
+    pdf.text(title, contentX, y);
+    y += 16;
+  }
+
+  function drawInlineRow(text, type) {
+    const rowText = (text || '').replace(/\s+/g, ' ').trim();
+    if (!rowText) return;
+
+    const lines = pdf.splitTextToSize(rowText, contentW - 10);
+    const rowHeight = lines.length * 11 + 6;
+    ensureSpace(rowHeight + 4);
+
+    if (type === 'add') {
+      pdf.setFillColor(...palette.addBg);
+      pdf.roundedRect(contentX, y - 9, contentW, rowHeight, 4, 4, 'F');
+    } else if (type === 'remove') {
+      pdf.setFillColor(...palette.removeBg);
+      pdf.roundedRect(contentX, y - 9, contentW, rowHeight, 4, 4, 'F');
+    }
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    if (type === 'add') pdf.setTextColor(...palette.addText);
+    else if (type === 'remove') pdf.setTextColor(...palette.removeText);
+    else pdf.setTextColor(...palette.text);
+
+    let lineY = y;
+    for (const line of lines) {
+      pdf.text(line, contentX + 5, lineY);
+      lineY += 11;
+    }
+    y += rowHeight;
+  }
+
+  function drawTableHeader() {
+    ensureSpace(24);
+    pdf.setFillColor(...palette.tableHeaderBg);
+    pdf.rect(contentX, y - 10, colW, 18, 'F');
+    pdf.rect(contentX + colW + colGap, y - 10, colW, 18, 'F');
+    pdf.setDrawColor(...palette.border);
+    pdf.rect(contentX, y - 10, colW, 18);
+    pdf.rect(contentX + colW + colGap, y - 10, colW, 18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(9);
+    pdf.setTextColor(...palette.heading);
+    pdf.text('Original', contentX + 5, y + 2);
+    pdf.text('Updated', contentX + colW + colGap + 5, y + 2);
+    y += 20;
+  }
+
+  function drawSideBySideRow(row) {
+    const leftLines = pdf.splitTextToSize((row.left || '').replace(/\n/g, ' '), colW - 8);
+    const rightLines = pdf.splitTextToSize((row.right || '').replace(/\n/g, ' '), colW - 8);
+    const lineCount = Math.max(leftLines.length || 1, rightLines.length || 1);
+    const rowH = lineCount * 10 + 8;
+
+    if (y + rowH > contentBottom) {
+      newPage();
+      sectionTitle('Side-by-Side Diff (cont.)');
+      drawTableHeader();
+    }
+
+    const leftType = row.type === 'remove' || row.type === 'replace';
+    const rightType = row.type === 'add' || row.type === 'replace';
+
+    if (leftType) {
+      pdf.setFillColor(...palette.removeBg);
+      pdf.rect(contentX, y - 8, colW, rowH, 'F');
+    }
+    if (rightType) {
+      pdf.setFillColor(...palette.addBg);
+      pdf.rect(contentX + colW + colGap, y - 8, colW, rowH, 'F');
+    }
+
+    pdf.setDrawColor(...palette.border);
+    pdf.rect(contentX, y - 8, colW, rowH);
+    pdf.rect(contentX + colW + colGap, y - 8, colW, rowH);
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+
+    for (let i = 0; i < lineCount; i += 1) {
+      const lineY = y + i * 10;
+
+      pdf.setTextColor(...(leftType ? palette.removeText : palette.text));
+      pdf.text(leftLines[i] || '', contentX + 4, lineY);
+
+      pdf.setTextColor(...(rightType ? palette.addText : palette.text));
+      pdf.text(rightLines[i] || '', contentX + colW + colGap + 4, lineY);
+    }
+
+    y += rowH;
+  }
+
+  newPage();
+
+  writeWrapped('Version Compare Report', { size: 16, font: 'bold', color: palette.heading });
+  y += 2;
+  writeWrapped(`Generated: ${lastResult.generated_at_utc}`, { size: 9, color: palette.muted });
+  writeWrapped(`Original Source: ${lastResult.source?.original_label || ''}`, {
+    size: 9,
+    color: palette.muted,
+  });
+  writeWrapped(`Updated Source: ${lastResult.source?.updated_label || ''}`, {
+    size: 9,
+    color: palette.muted,
+  });
+
+  sectionTitle('Summary');
+  const s = lastResult.summary || {};
+  writeWrapped(`Original word count: ${s.original_word_count ?? 0}`);
+  writeWrapped(`Updated word count: ${s.updated_word_count ?? 0}`);
+  writeWrapped(`Words added: ${s.added_words ?? 0}`);
+  writeWrapped(`Words removed: ${s.removed_words ?? 0}`);
+  writeWrapped(`Net word change: ${s.net_word_change ?? 0}`);
+
+  sectionTitle('Inline Diff');
+  for (const seg of (lastResult.segments || []).slice(0, 450)) {
+    drawInlineRow(seg.text, seg.type);
+  }
+
+  sectionTitle('Side-by-Side Diff');
+  drawTableHeader();
+  for (const row of (lastResult.side_by_side || []).slice(0, 220)) {
+    drawSideBySideRow(row);
+  }
+
+  const name = `version-compare-report-${new Date().toISOString().replaceAll(':', '-')}.pdf`;
+  pdf.save(name);
+  setStatus('PDF report downloaded.');
+}
+
+compareBtn.addEventListener('click', async () => {
+  setStatus('Comparing...');
+  resultsEl.classList.add('hidden');
+
+  try {
+    const { textA, textB, source } = await getInputsByMode();
+    const result = runCompare(textA, textB, source);
+    lastResult = result;
+
+    renderSummary(result.summary);
+    renderInlineDiff(result.segments);
+    renderSideBySide(result.side_by_side);
+
+    downloadHtmlBtn.disabled = false;
+    downloadPdfBtn.disabled = false;
+    resultsEl.classList.remove('hidden');
+    setStatus('Comparison complete.');
+  } catch (error) {
+    setStatus(error.message || 'Comparison failed.', true);
+  }
+});
+
+loadSampleBtn.addEventListener('click', () => {
+  setMode('text');
+  document.getElementById('text-a').value = SAMPLE_TEXT_A;
+  document.getElementById('text-b').value = SAMPLE_TEXT_B;
+  setStatus('Sample content loaded. Click Compare.');
+});
+
+downloadHtmlBtn.addEventListener('click', downloadHtmlReport);
+downloadPdfBtn.addEventListener('click', downloadPdfReport);

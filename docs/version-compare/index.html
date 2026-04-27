@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Version Compare</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <header class="header">
+          <h1>Version Compare</h1>
+          <p>Compare two versions and review exact additions and removals.</p>
+        </header>
+
+        <details class="help-disclosure">
+          <summary>Help</summary>
+          <div class="help-disclosure__body">
+            <ol>
+              <li>Select an input mode: <strong>Pasted Text</strong>, <strong>Files</strong>, or <strong>URLs</strong>.</li>
+              <li>Provide original and updated versions.</li>
+              <li>Click <strong>Compare</strong> to view summary plus highlighted changes.</li>
+              <li>Export with <strong>Download HTML Report</strong> or <strong>Download PDF Report</strong>.</li>
+            </ol>
+            <p>URL mode may be blocked by CORS/auth on private links. If that happens, paste text or upload files.</p>
+          </div>
+        </details>
+
+        <section class="mode-picker" role="tablist" aria-label="Input mode">
+          <button type="button" class="mode-btn active" data-mode="text">Pasted Text</button>
+          <button type="button" class="mode-btn" data-mode="files">Files (.txt/.pdf)</button>
+          <button type="button" class="mode-btn" data-mode="urls">URLs</button>
+        </section>
+
+        <section id="panel-text" class="mode-panel">
+          <label for="text-a">Original text</label>
+          <textarea id="text-a" rows="8" placeholder="Paste original version"></textarea>
+          <label for="text-b">Updated text</label>
+          <textarea id="text-b" rows="8" placeholder="Paste updated version"></textarea>
+        </section>
+
+        <section id="panel-files" class="mode-panel hidden">
+          <label for="file-a">Original file (.txt or .pdf)</label>
+          <input id="file-a" type="file" accept=".txt,.pdf,text/plain,application/pdf" />
+          <label for="file-b">Updated file (.txt or .pdf)</label>
+          <input id="file-b" type="file" accept=".txt,.pdf,text/plain,application/pdf" />
+        </section>
+
+        <section id="panel-urls" class="mode-panel hidden">
+          <label for="url-a">Original URL</label>
+          <input id="url-a" type="url" placeholder="https://..." />
+          <label for="url-b">Updated URL</label>
+          <input id="url-b" type="url" placeholder="https://..." />
+        </section>
+
+        <section class="actions">
+          <button id="load-sample" type="button" class="ghost">Try Sample Compare</button>
+          <button id="compare-btn" type="button" class="primary">Compare</button>
+          <button id="download-html" type="button" class="secondary" disabled>Download HTML Report</button>
+          <button id="download-pdf" type="button" class="secondary" disabled>Download PDF Report</button>
+        </section>
+
+        <div id="status" class="status"></div>
+
+        <section id="results" class="results hidden">
+          <h2>Summary</h2>
+          <ul id="summary-list"></ul>
+
+          <h2>Inline Diff</h2>
+          <p class="legend"><span class="added">Added</span> <span class="removed">Removed</span></p>
+          <div id="inline-diff" class="inline-diff"></div>
+
+          <h2>Side-by-Side Diff</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Original</th><th>Updated</th></tr>
+              </thead>
+              <tbody id="side-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
