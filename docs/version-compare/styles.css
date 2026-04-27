@@ -247,6 +247,12 @@ button:disabled {
   color: var(--error);
 }
 
+.empty-state {
+  margin: 0.55rem 0 0;
+  color: #b9b9b9;
+  font-size: 0.88rem;
+}
+
 .results {
   margin-top: 1.35rem;
   border-top: 1px solid var(--border);

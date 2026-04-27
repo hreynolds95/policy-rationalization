@@ -11,6 +11,7 @@ const downloadHtmlBtn = document.getElementById('download-html');
 const downloadPdfBtn = document.getElementById('download-pdf');
 const exportActionsEl = document.getElementById('export-actions');
 const statusEl = document.getElementById('status');
+const emptyStateEl = document.getElementById('empty-state');
 const resultsEl = document.getElementById('results');
 const summaryListEl = document.getElementById('summary-list');
 const toggleInlineBtn = document.getElementById('toggle-inline');
@@ -63,6 +64,32 @@ function setExportEnabled(enabled) {
   exportActionsEl?.classList.toggle('hidden', !enabled);
 }
 
+function getEmptyStateMessage(mode = activeMode) {
+  if (mode === 'files') {
+    return 'Upload two files and click Compare.';
+  }
+  if (mode === 'urls') {
+    return 'Paste two URLs and click Compare.';
+  }
+  return 'Paste two versions and click Compare.';
+}
+
+function setEmptyState(visible, mode = activeMode) {
+  if (!emptyStateEl) return;
+  emptyStateEl.classList.toggle('hidden', !visible);
+  if (visible) {
+    emptyStateEl.textContent = getEmptyStateMessage(mode);
+  } else {
+    emptyStateEl.textContent = '';
+  }
+}
+
+function clearRenderedResults() {
+  summaryListEl.innerHTML = '';
+  inlineDiffEl.innerHTML = '';
+  sideBodyEl.innerHTML = '';
+}
+
 function setResultSectionVisibility(section, visible) {
   if (!section) return;
   section.classList.toggle('hidden', !visible);
@@ -91,10 +118,26 @@ function setMode(mode) {
   Object.entries(panels).forEach(([name, panel]) => panel.classList.toggle('hidden', name !== mode));
 }
 
-modeButtons.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+function clearComparisonState() {
+  lastResult = null;
+  resultsEl.classList.add('hidden');
+  setExportEnabled(false);
+  clearRenderedResults();
+  resetResultPanels();
+  setEmptyState(true, activeMode);
+}
+
+modeButtons.forEach((btn) =>
+  btn.addEventListener('click', () => {
+    const nextMode = btn.dataset.mode;
+    if (nextMode === activeMode) return;
+    setMode(nextMode);
+    clearComparisonState();
+    setStatus('ready');
+  })
+);
 setMode(activeMode);
-setExportEnabled(false);
-resetResultPanels();
+clearComparisonState();
 setStatus('ready');
 
 toggleInlineBtn?.addEventListener('click', () => {
@@ -765,6 +808,7 @@ compareBtn.addEventListener('click', async () => {
   resultsEl.classList.add('hidden');
   setExportEnabled(false);
   resetResultPanels();
+  setEmptyState(false);
 
   try {
     const { textA, textB, source } = await getInputsByMode();
@@ -777,9 +821,11 @@ compareBtn.addEventListener('click', async () => {
 
     setExportEnabled(true);
     resultsEl.classList.remove('hidden');
+    setEmptyState(false);
     setStatus('done');
   } catch (error) {
     setExportEnabled(false);
+    setEmptyState(true, activeMode);
     const detail = String(error?.message || 'Comparison failed').replace(/\s+/g, ' ').trim();
     if (/\brequired\b/i.test(detail)) {
       setStatus('needs_input', detail);
@@ -791,6 +837,7 @@ compareBtn.addEventListener('click', async () => {
 
 loadSampleBtn.addEventListener('click', () => {
   setMode('text');
+  clearComparisonState();
   document.getElementById('text-a').value = SAMPLE_TEXT_A;
   document.getElementById('text-b').value = SAMPLE_TEXT_B;
   setStatus('ready', 'sample loaded');
