@@ -75,18 +75,27 @@
           <h2>Summary</h2>
           <ul id="summary-list"></ul>
 
-          <h2>Inline Diff</h2>
-          <p class="legend"><span class="added">Added</span> <span class="removed">Removed</span></p>
-          <div id="inline-diff" class="inline-diff"></div>
+          <div class="result-toggles">
+            <button id="toggle-inline" type="button" class="toggle-btn" aria-expanded="false">Show Inline Diff</button>
+            <button id="toggle-side" type="button" class="toggle-btn" aria-expanded="false">Show Side-by-Side</button>
+          </div>
 
-          <h2>Side-by-Side Diff</h2>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Original</th><th>Updated</th></tr>
-              </thead>
-              <tbody id="side-body"></tbody>
-            </table>
+          <div id="inline-section" class="result-section hidden">
+            <h2>Inline Diff</h2>
+            <p class="legend"><span class="added">Added</span> <span class="removed">Removed</span></p>
+            <div id="inline-diff" class="inline-diff"></div>
+          </div>
+
+          <div id="side-section" class="result-section hidden">
+            <h2>Side-by-Side Diff</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Original</th><th>Updated</th></tr>
+                </thead>
+                <tbody id="side-body"></tbody>
+              </table>
+            </div>
           </div>
         </section>
       </section>

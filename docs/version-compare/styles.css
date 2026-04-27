@@ -248,6 +248,24 @@ button:disabled {
   padding-left: 1rem;
 }
 
+.result-toggles {
+  margin-top: 0.9rem;
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.toggle-btn {
+  background: #121212;
+  color: #ececec;
+  border: 1px solid #4a4a4a;
+  font-weight: 600;
+}
+
+.result-section {
+  margin-top: 0.9rem;
+}
+
 .legend {
   display: flex;
   gap: 0.7rem;

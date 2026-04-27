@@ -13,6 +13,10 @@ const exportActionsEl = document.getElementById('export-actions');
 const statusEl = document.getElementById('status');
 const resultsEl = document.getElementById('results');
 const summaryListEl = document.getElementById('summary-list');
+const toggleInlineBtn = document.getElementById('toggle-inline');
+const toggleSideBtn = document.getElementById('toggle-side');
+const inlineSectionEl = document.getElementById('inline-section');
+const sideSectionEl = document.getElementById('side-section');
 const inlineDiffEl = document.getElementById('inline-diff');
 const sideBodyEl = document.getElementById('side-body');
 
@@ -47,6 +51,24 @@ function setExportEnabled(enabled) {
   exportActionsEl?.classList.toggle('hidden', !enabled);
 }
 
+function setResultSectionVisibility(section, visible) {
+  if (!section) return;
+  section.classList.toggle('hidden', !visible);
+}
+
+function setToggleButtonState(button, visible, showLabel, hideLabel) {
+  if (!button) return;
+  button.setAttribute('aria-expanded', visible ? 'true' : 'false');
+  button.textContent = visible ? hideLabel : showLabel;
+}
+
+function resetResultPanels() {
+  setResultSectionVisibility(inlineSectionEl, false);
+  setResultSectionVisibility(sideSectionEl, false);
+  setToggleButtonState(toggleInlineBtn, false, 'Show Inline Diff', 'Hide Inline Diff');
+  setToggleButtonState(toggleSideBtn, false, 'Show Side-by-Side', 'Hide Side-by-Side');
+}
+
 function setMode(mode) {
   activeMode = mode;
   modeButtons.forEach((btn) => {
@@ -60,6 +82,21 @@ function setMode(mode) {
 modeButtons.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
 setMode(activeMode);
 setExportEnabled(false);
+resetResultPanels();
+
+toggleInlineBtn?.addEventListener('click', () => {
+  const isVisible = !inlineSectionEl.classList.contains('hidden');
+  const next = !isVisible;
+  setResultSectionVisibility(inlineSectionEl, next);
+  setToggleButtonState(toggleInlineBtn, next, 'Show Inline Diff', 'Hide Inline Diff');
+});
+
+toggleSideBtn?.addEventListener('click', () => {
+  const isVisible = !sideSectionEl.classList.contains('hidden');
+  const next = !isVisible;
+  setResultSectionVisibility(sideSectionEl, next);
+  setToggleButtonState(toggleSideBtn, next, 'Show Side-by-Side', 'Hide Side-by-Side');
+});
 
 function tokenizeWords(text) {
   return text.match(/\s+|[^\s]+/g) || [];
@@ -714,6 +751,7 @@ compareBtn.addEventListener('click', async () => {
   setStatus('Comparing...');
   resultsEl.classList.add('hidden');
   setExportEnabled(false);
+  resetResultPanels();
 
   try {
     const { textA, textB, source } = await getInputsByMode();
