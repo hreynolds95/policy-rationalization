@@ -1280,8 +1280,8 @@ function buildGroupMarkup(result, groups) {
               .map(
                 ([label, value]) => `
                   <div class="check">
-                    <span>${formatLabel(label)}</span>
-                    <strong>${value}</strong>
+                    <span class="check__label">${formatLabel(label)}</span>
+                    <strong class="check__value">${value}</strong>
                   </div>
                 `
               )
