@@ -9,7 +9,7 @@ import {
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 2:46 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 3:03 PM EDT";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
@@ -409,10 +409,10 @@ function setStatusShellVisibility(isVisible) {
 }
 
 function loadDeploymentBadge() {
-  const fallback = typeof document !== "undefined" && document.lastModified
+  const pageTimestamp = typeof document !== "undefined" && document.lastModified
     ? formatDeploymentTimestamp(document.lastModified)
-    : "timestamp unavailable";
-  setDeploymentBadge("Last updated:", STATIC_LAST_UPDATED || fallback);
+    : "";
+  setDeploymentBadge("Last updated:", pageTimestamp || STATIC_LAST_UPDATED || "timestamp unavailable");
 }
 
 function computeWorkspaceReadiness() {
