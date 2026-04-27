@@ -887,6 +887,45 @@ button:hover,
   border: 1px solid var(--line);
 }
 
+.decision-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.decision-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--accent-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.decision-summary-pill--accept {
+  color: var(--success);
+  background: rgba(163, 215, 149, 0.14);
+}
+
+.decision-summary-pill--revise {
+  color: var(--warning);
+  background: rgba(255, 217, 102, 0.14);
+}
+
+.decision-summary-pill--split {
+  color: var(--info);
+  background: rgba(124, 172, 255, 0.14);
+}
+
+.decision-summary-pill--escalate {
+  color: #ffb6b6;
+  background: rgba(255, 107, 107, 0.14);
+}
+
 .decision-card__header {
   display: flex;
   justify-content: space-between;

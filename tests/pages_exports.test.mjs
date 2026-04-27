@@ -79,8 +79,12 @@ test("exports carry reviewer decisions and notes", () => {
   assert.match(csv, /reviewer_decision,reviewer_note/);
   assert.match(csv, /revise/);
   assert.match(csv, /Need policy owner wording review before accepting/);
+  assert.match(markdown, /Decisions captured: 1/);
+  assert.match(markdown, /Revise decisions: 1/);
   assert.match(markdown, /Reviewer decision: revise/);
   assert.match(markdown, /Reviewer note: Need policy owner wording review before accepting/);
+  assert.match(html, /Decisions captured: 1/);
+  assert.match(html, /Revise: 1/);
   assert.match(html, /Reviewer decision:<\/strong> revise/);
   assert.match(html, /Reviewer note:<\/strong> Need policy owner wording review before accepting/);
 });

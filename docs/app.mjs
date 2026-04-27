@@ -10,7 +10,7 @@ import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:18 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:29 PM EDT";
 const GROUP_DECISION_OPTIONS = [
   { value: "accept", label: "Accept" },
   { value: "revise", label: "Revise" },
@@ -787,6 +787,7 @@ function buildStepHero(routeId, context) {
 function buildAnalysisSummaryMarkup() {
   const result = state.analysisView.result;
   const summary = buildSummary(result);
+  const decisionSummary = summarizeDecisions(result.requirementGroups, state.analysisView.groupDecisions);
   const strongestGroup = result.requirementGroups[0];
   const mappedRequirementCount = new Set(
     result.requirementGroups.flatMap((group) => group.requirementIds)
@@ -817,6 +818,19 @@ function buildAnalysisSummaryMarkup() {
           <span class="doc-badge doc-badge--ok">Groups ${result.requirementGroups.length}</span>
         </div>
       </div>
+      ${buildDecisionSummaryBarMarkup(decisionSummary)}
+    </div>
+  `;
+}
+
+function buildDecisionSummaryBarMarkup(decisionSummary) {
+  return `
+    <div class="decision-summary-bar">
+      <span class="decision-summary-pill">Captured ${decisionSummary.captured}</span>
+      <span class="decision-summary-pill decision-summary-pill--accept">Accept ${decisionSummary.accept}</span>
+      <span class="decision-summary-pill decision-summary-pill--revise">Revise ${decisionSummary.revise}</span>
+      <span class="decision-summary-pill decision-summary-pill--split">Split ${decisionSummary.split}</span>
+      <span class="decision-summary-pill decision-summary-pill--escalate">Escalate ${decisionSummary.escalate}</span>
     </div>
   `;
 }
@@ -951,10 +965,7 @@ function buildExportStepMarkup() {
   );
   const issuesHtml = buildIssuesMarkup(filtered.issues);
   const viewLabel = state.analysisView.filter === "all" ? "All results" : `${state.analysisView.filter} filter`;
-  const visibleDecisionCount = filtered.groups.filter((group) => {
-    const decision = state.analysisView.groupDecisions[getRequirementGroupKey(group)];
-    return Boolean(decision?.decision || decision?.note);
-  }).length;
+  const decisionSummary = summarizeDecisions(filtered.groups, state.analysisView.groupDecisions);
   return `
     <section class="wizard-step-page">
       ${buildStepHero("export")}
@@ -967,9 +978,10 @@ function buildExportStepMarkup() {
           <span class="source-chip source-chip--active">${escapeHtml(viewLabel)}</span>
           ${state.analysisView.query ? `<span class="source-chip source-chip--active">Search: ${escapeHtml(state.analysisView.query)}</span>` : ""}
           <span class="doc-badge">Docs ${filtered.documents.length}</span>
-          <span class="doc-badge">Decisions ${visibleDecisionCount}</span>
+          <span class="doc-badge">Decisions ${decisionSummary.captured}</span>
           <span class="doc-badge doc-badge--warn">Issues ${filtered.issues.length}</span>
         </div>
+        ${buildDecisionSummaryBarMarkup(decisionSummary)}
         <div class="control-row">
           <button class="primary-button" type="button" data-export-format="redline">Export Redline Report</button>
           <button class="primary-button" type="button" data-export-format="csv">Export CSV</button>
@@ -2329,6 +2341,10 @@ export function buildConsolidatedRedlineReportHtml(payload) {
           <p>Material changes: ${materialCount}</p>
           <p>Requirements in view: ${payload.filtered.requirements.length}</p>
           <p>Decisions captured: ${decisionSummary.captured}</p>
+          <p>Accept: ${decisionSummary.accept}</p>
+          <p>Revise: ${decisionSummary.revise}</p>
+          <p>Split: ${decisionSummary.split}</p>
+          <p>Escalate: ${decisionSummary.escalate}</p>
         </article>
       </div>
     </section>
@@ -2438,6 +2454,10 @@ export function buildMarkdownExport(payload) {
     `- Visible requirement pairs: ${payload.filtered.edges.length}`,
     `- Visible import issues: ${payload.filtered.issues.length}`,
     `- Decisions captured: ${decisionSummary.captured}`,
+    `- Accept decisions: ${decisionSummary.accept}`,
+    `- Revise decisions: ${decisionSummary.revise}`,
+    `- Split decisions: ${decisionSummary.split}`,
+    `- Escalate decisions: ${decisionSummary.escalate}`,
     "",
     "## Policy-On-Policies Hierarchy",
     "",
