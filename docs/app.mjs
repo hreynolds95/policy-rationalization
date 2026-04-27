@@ -10,7 +10,13 @@ import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:07 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:18 PM EDT";
+const GROUP_DECISION_OPTIONS = [
+  { value: "accept", label: "Accept" },
+  { value: "revise", label: "Revise" },
+  { value: "split", label: "Split" },
+  { value: "escalate", label: "Escalate" },
+];
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
@@ -77,6 +83,7 @@ const state = {
     documents: [],
     threshold: 0.45,
     levelOverrides: {},
+    groupDecisions: {},
     usedSampleData: false,
     result: null,
     issues: [],
@@ -104,6 +111,18 @@ function encodeUrlParam(value) {
 
 function pluralize(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function getRequirementGroupKey(group) {
+  return [...(group?.requirementIds || [])].sort().join("::");
+}
+
+function getGroupDecision(group) {
+  return state.analysisView.groupDecisions[getRequirementGroupKey(group)] || {
+    decision: "",
+    note: "",
+    updatedAt: "",
+  };
 }
 
 function deriveTitleFromUrl(url) {
@@ -181,6 +200,7 @@ function persistState() {
       documents: state.analysisView.documents,
       threshold: state.analysisView.threshold,
       levelOverrides: state.analysisView.levelOverrides,
+      groupDecisions: state.analysisView.groupDecisions,
       usedSampleData: state.analysisView.usedSampleData,
       result: state.analysisView.result,
       issues: state.analysisView.issues,
@@ -221,6 +241,7 @@ function restoreState() {
       : [];
     state.analysisView.threshold = Number(parsed.analysisView?.threshold || 0.45);
     state.analysisView.levelOverrides = parsed.analysisView?.levelOverrides || {};
+    state.analysisView.groupDecisions = parsed.analysisView?.groupDecisions || {};
     state.analysisView.usedSampleData = Boolean(parsed.analysisView?.usedSampleData);
     state.analysisView.result = parsed.analysisView?.result || null;
     state.analysisView.issues = Array.isArray(parsed.analysisView?.issues) ? parsed.analysisView.issues : [];
@@ -930,6 +951,10 @@ function buildExportStepMarkup() {
   );
   const issuesHtml = buildIssuesMarkup(filtered.issues);
   const viewLabel = state.analysisView.filter === "all" ? "All results" : `${state.analysisView.filter} filter`;
+  const visibleDecisionCount = filtered.groups.filter((group) => {
+    const decision = state.analysisView.groupDecisions[getRequirementGroupKey(group)];
+    return Boolean(decision?.decision || decision?.note);
+  }).length;
   return `
     <section class="wizard-step-page">
       ${buildStepHero("export")}
@@ -942,6 +967,7 @@ function buildExportStepMarkup() {
           <span class="source-chip source-chip--active">${escapeHtml(viewLabel)}</span>
           ${state.analysisView.query ? `<span class="source-chip source-chip--active">Search: ${escapeHtml(state.analysisView.query)}</span>` : ""}
           <span class="doc-badge">Docs ${filtered.documents.length}</span>
+          <span class="doc-badge">Decisions ${visibleDecisionCount}</span>
           <span class="doc-badge doc-badge--warn">Issues ${filtered.issues.length}</span>
         </div>
         <div class="control-row">
@@ -1555,6 +1581,50 @@ function buildRequirementRedlineMarkup(result, group) {
   `;
 }
 
+function buildGroupDecisionMarkup(group) {
+  const key = getRequirementGroupKey(group);
+  const current = getGroupDecision(group);
+  const updatedLabel = current.updatedAt
+    ? new Date(current.updatedAt).toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "";
+
+  return `
+    <section class="decision-card">
+      <div class="decision-card__header">
+        <h5>Reviewer decision</h5>
+        ${updatedLabel ? `<span class="result-card__meta">Updated ${escapeHtml(updatedLabel)}</span>` : ""}
+      </div>
+      <div class="decision-card__controls">
+        <label class="decision-control" for="decision-${escapeHtml(key)}">
+          <span class="doc-type-control__label">Disposition</span>
+          <select id="decision-${escapeHtml(key)}" class="doc-type-select" data-group-decision data-group-key="${escapeHtml(key)}">
+            <option value="">Select a decision</option>
+            ${GROUP_DECISION_OPTIONS.map(
+              (option) => `<option value="${option.value}" ${current.decision === option.value ? "selected" : ""}>${option.label}</option>`
+            ).join("")}
+          </select>
+        </label>
+        <label class="decision-control decision-control--note" for="decision-note-${escapeHtml(key)}">
+          <span class="doc-type-control__label">Reviewer note</span>
+          <textarea
+            id="decision-note-${escapeHtml(key)}"
+            class="decision-note-input"
+            data-group-decision-note
+            data-group-key="${escapeHtml(key)}"
+            placeholder="Capture why this group was accepted, revised, split, or escalated."
+          >${escapeHtml(current.note || "")}</textarea>
+        </label>
+      </div>
+    </section>
+  `;
+}
+
 function buildRequirementGroupMarkup(result, groups) {
   if (!groups.length) {
     return `<article class="result-card"><p>No cross-document requirement mapping groups were found at the current threshold.</p></article>`;
@@ -1601,6 +1671,7 @@ function buildRequirementGroupMarkup(result, groups) {
             .join("")}
         </div>
         ${group.checks.hierarchyIssues?.length ? `<p class="document-note">${group.checks.hierarchyIssues.join("; ")}</p>` : ""}
+        ${buildGroupDecisionMarkup(group)}
         ${buildRequirementRedlineMarkup(result, group)}
         <ul class="requirement-list">
           ${requirements.map((requirement) => `
@@ -1922,7 +1993,7 @@ function filterAnalysisView(result, issues, rawQuery, filter) {
   };
 }
 
-export function buildExportPayload(result, issues, rawQuery, filter, threshold = 0.45) {
+export function buildExportPayload(result, issues, rawQuery, filter, threshold = 0.45, options = {}) {
   const filtered = filterAnalysisView(result, issues, rawQuery, filter);
   const strongestCanonicalRequirement = result.requirementGroups[0]
     ? result.requirements.find(
@@ -1936,6 +2007,7 @@ export function buildExportPayload(result, issues, rawQuery, filter, threshold =
     filter,
     summary: buildSummary(result),
     strongestCanonicalTitle: strongestCanonicalRequirement?.sourceDocumentTitle || "None",
+    groupDecisions: options.groupDecisions || state.analysisView.groupDecisions,
     sourceResult: result,
     filtered,
   };
@@ -1949,7 +2021,30 @@ function csvEscape(value) {
   return stringValue;
 }
 
-function buildRedlineSectionHtml(result, group, index) {
+function summarizeDecisions(groups, groupDecisions = {}) {
+  const summary = {
+    captured: 0,
+    accept: 0,
+    revise: 0,
+    split: 0,
+    escalate: 0,
+  };
+
+  for (const group of groups || []) {
+    const decision = groupDecisions[getRequirementGroupKey(group)] || {};
+    if (!decision.decision && !decision.note) {
+      continue;
+    }
+    summary.captured += 1;
+    if (decision.decision && Object.hasOwn(summary, decision.decision)) {
+      summary[decision.decision] += 1;
+    }
+  }
+
+  return summary;
+}
+
+function buildRedlineSectionHtml(result, group, index, groupDecisions = {}) {
   const redline = buildRequirementRedlineModel(result, group);
   if (!redline) {
     return "";
@@ -1967,6 +2062,7 @@ function buildRedlineSectionHtml(result, group, index) {
   const checksText = Object.entries(group.checks)
     .map(([label, value]) => `${formatLabel(label)} = ${Array.isArray(value) ? value.join("; ") : value}`)
     .join("; ");
+  const decision = groupDecisions[getRequirementGroupKey(group)] || {};
   const sideBySideHtml = redline.compareResult.side_by_side
     .map(
       (row) => `
@@ -2005,6 +2101,8 @@ function buildRedlineSectionHtml(result, group, index) {
       <p class="helper">${escapeHtml(redline.reviewNote)}</p>
       <p class="helper"><strong>Recommendation:</strong> ${escapeHtml(group.recommendation)}</p>
       <p class="helper"><strong>Checks:</strong> ${escapeHtml(checksText)}</p>
+      <p class="helper"><strong>Reviewer decision:</strong> ${escapeHtml(decision.decision || "None")}</p>
+      <p class="helper"><strong>Reviewer note:</strong> ${escapeHtml(decision.note || "None")}</p>
       <div class="copy-grid">
         <article class="copy-card">
           <h3>Current canonical text</h3>
@@ -2034,8 +2132,9 @@ export function buildConsolidatedRedlineReportHtml(payload) {
   const groups = payload.filtered.groups;
   const quickWinCount = groups.filter((group) => group.recommendationBucket === "quick-win").length;
   const materialCount = groups.filter((group) => group.recommendationBucket === "material-change").length;
+  const decisionSummary = summarizeDecisions(groups, payload.groupDecisions);
   const sections = groups
-    .map((group, index) => buildRedlineSectionHtml(payload.sourceResult, group, index))
+    .map((group, index) => buildRedlineSectionHtml(payload.sourceResult, group, index, payload.groupDecisions))
     .join("");
 
   return `<!doctype html>
@@ -2229,6 +2328,7 @@ export function buildConsolidatedRedlineReportHtml(payload) {
           <p>Quick wins: ${quickWinCount}</p>
           <p>Material changes: ${materialCount}</p>
           <p>Requirements in view: ${payload.filtered.requirements.length}</p>
+          <p>Decisions captured: ${decisionSummary.captured}</p>
         </article>
       </div>
     </section>
@@ -2253,6 +2353,8 @@ export function buildCsvExport(payload) {
       "mapped_group_size",
       "group_bucket",
       "group_review_status",
+      "reviewer_decision",
+      "reviewer_note",
       "canonical_document",
       "canonical_requirement_text",
       "redline_status",
@@ -2276,6 +2378,7 @@ export function buildCsvExport(payload) {
           .find((candidate) => candidate?.requirementId === group.recommendedPrimaryRequirementId)
       : null;
     const redline = group ? buildRequirementRedlineModel(payload.sourceResult, group) : null;
+    const decision = group ? payload.groupDecisions[getRequirementGroupKey(group)] || {} : {};
     rows.push([
       requirement.sourceDocumentTitle,
       payload.filtered.documents.find((document) => document.id === requirement.documentId)?.source || "",
@@ -2289,6 +2392,8 @@ export function buildCsvExport(payload) {
       String(group?.requirementIds.length || 0),
       group?.recommendationBucket || "",
       group?.checks?.hierarchyReviewStatus || "",
+      decision.decision || "",
+      decision.note || "",
       primaryRequirement?.sourceDocumentTitle || "",
       primaryRequirement?.requirementText || "",
       redline?.autoRedlineStatus || "",
@@ -2303,6 +2408,7 @@ export function buildCsvExport(payload) {
 export function buildMarkdownExport(payload) {
   const quickWins = payload.filtered.groups.filter((group) => group.recommendationBucket === "quick-win");
   const materialChanges = payload.filtered.groups.filter((group) => group.recommendationBucket === "material-change");
+  const decisionSummary = summarizeDecisions(payload.filtered.groups, payload.groupDecisions);
   const mappedRequirementCount = new Set(
     payload.filtered.groups.flatMap((group) => group.requirementIds)
   ).size;
@@ -2331,6 +2437,7 @@ export function buildMarkdownExport(payload) {
     `- Unmapped visible requirements: ${Math.max(0, payload.filtered.requirements.length - mappedRequirementCount)}`,
     `- Visible requirement pairs: ${payload.filtered.edges.length}`,
     `- Visible import issues: ${payload.filtered.issues.length}`,
+    `- Decisions captured: ${decisionSummary.captured}`,
     "",
     "## Policy-On-Policies Hierarchy",
     "",
@@ -2354,9 +2461,12 @@ export function buildMarkdownExport(payload) {
         (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
       );
       const redline = buildRequirementRedlineModel(payload.sourceResult, group);
+      const decision = payload.groupDecisions[getRequirementGroupKey(group)] || {};
       lines.push(`### Group ${index + 1}`);
       lines.push("");
       lines.push(`- Recommendation bucket: Quick win`);
+      lines.push(`- Reviewer decision: ${decision.decision || "None"}`);
+      lines.push(`- Reviewer note: ${decision.note || "None"}`);
       lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
       lines.push(`- Canonical source: ${primaryRequirement?.sourceDocumentTitle || "Unknown"}`);
       lines.push(`- Canonical requirement: ${primaryRequirement?.requirementText || "Unknown"}`);
@@ -2388,9 +2498,12 @@ export function buildMarkdownExport(payload) {
         (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
       );
       const redline = buildRequirementRedlineModel(payload.sourceResult, group);
+      const decision = payload.groupDecisions[getRequirementGroupKey(group)] || {};
       lines.push(`### Group ${index + 1}`);
       lines.push("");
       lines.push(`- Recommendation bucket: Material change`);
+      lines.push(`- Reviewer decision: ${decision.decision || "None"}`);
+      lines.push(`- Reviewer note: ${decision.note || "None"}`);
       lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
       lines.push(`- Canonical source: ${primaryRequirement?.sourceDocumentTitle || "Unknown"}`);
       lines.push(`- Canonical requirement: ${primaryRequirement?.requirementText || "Unknown"}`);
@@ -2546,6 +2659,7 @@ function rerunAnalysisWithOverrides() {
     state.analysisView.threshold,
     state.analysisView.levelOverrides
   );
+  pruneGroupDecisions(state.analysisView.result);
   persistState();
   renderApp();
 }
@@ -2562,6 +2676,7 @@ function resetWorkspace() {
   state.analysisView.documents = [];
   state.analysisView.threshold = 0.45;
   state.analysisView.levelOverrides = {};
+  state.analysisView.groupDecisions = {};
   state.analysisView.usedSampleData = false;
   state.analysisView.result = null;
   state.analysisView.issues = [];
@@ -2690,6 +2805,7 @@ async function runAnalysis() {
       state.analysisView.threshold,
       state.analysisView.levelOverrides
     );
+    pruneGroupDecisions(state.analysisView.result);
     state.analysisView.query = "";
     state.analysisView.filter = "all";
     state.analysisView.usedSampleData = state.includeSampleData;
@@ -2753,6 +2869,26 @@ function syncThresholdFromInput(value) {
   state.analysisView.threshold = Number(clamped.toFixed(2));
   persistState();
   renderApp();
+}
+
+function pruneGroupDecisions(result) {
+  const validKeys = new Set((result?.requirementGroups || []).map((group) => getRequirementGroupKey(group)));
+  state.analysisView.groupDecisions = Object.fromEntries(
+    Object.entries(state.analysisView.groupDecisions).filter(([key]) => validKeys.has(key))
+  );
+}
+
+function updateGroupDecision(groupKey, patch) {
+  const current = state.analysisView.groupDecisions[groupKey] || {
+    decision: "",
+    note: "",
+    updatedAt: "",
+  };
+  state.analysisView.groupDecisions[groupKey] = {
+    ...current,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function wireStepEvents(scope) {
@@ -2914,6 +3050,23 @@ function wireStepEvents(scope) {
         delete state.analysisView.levelOverrides[documentId];
       }
       rerunAnalysisWithOverrides();
+    });
+  });
+
+  scope.querySelectorAll("[data-group-decision]").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      const groupKey = event.target.getAttribute("data-group-key");
+      updateGroupDecision(groupKey, { decision: event.target.value });
+      persistState();
+      renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-group-decision-note]").forEach((input) => {
+    input.addEventListener("input", (event) => {
+      const groupKey = event.target.getAttribute("data-group-key");
+      updateGroupDecision(groupKey, { note: event.target.value });
+      persistState();
     });
   });
 

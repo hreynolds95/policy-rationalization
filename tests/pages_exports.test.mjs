@@ -34,11 +34,55 @@ test("buildCsvExport includes requirement-level mapping review fields", () => {
   const csv = buildCsvExport(payload);
 
   assert.match(csv, /document_title,source,requirement_id,section,anchor,document_type,requirement_type,hierarchy_alignment/);
-  assert.match(csv, /group_bucket,group_review_status,canonical_document,canonical_requirement_text,redline_status,proposed_requirement_text,requirement_text/);
+  assert.match(csv, /group_bucket,group_review_status,reviewer_decision,reviewer_note,canonical_document,canonical_requirement_text,redline_status,proposed_requirement_text,requirement_text/);
   assert.match(csv, /Records Retention Procedure/);
   assert.match(csv, /procedure-like content/);
   assert.match(csv, /policy/);
   assert.match(csv, /material-change/);
+});
+
+test("exports carry reviewer decisions and notes", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Records Retention Policy",
+        source: "manual://a",
+        text: "Retention Requirements\n\nRecords must be retained for seven years.",
+      },
+      {
+        id: "b",
+        title: "Records Retention Policy Copy",
+        source: "manual://b",
+        text: "Retention Requirements\n\nRecords must be retained for seven years across all entities.",
+      },
+    ],
+    0.2
+  );
+
+  const group = result.requirementGroups[0];
+  const groupKey = [...group.requirementIds].sort().join("::");
+  const payload = buildExportPayload(result, [], "", "all", 0.2, {
+    groupDecisions: {
+      [groupKey]: {
+        decision: "revise",
+        note: "Need policy owner wording review before accepting.",
+        updatedAt: "2026-04-27T22:00:00.000Z",
+      },
+    },
+  });
+
+  const csv = buildCsvExport(payload);
+  const markdown = buildMarkdownExport(payload);
+  const html = buildConsolidatedRedlineReportHtml(payload);
+
+  assert.match(csv, /reviewer_decision,reviewer_note/);
+  assert.match(csv, /revise/);
+  assert.match(csv, /Need policy owner wording review before accepting/);
+  assert.match(markdown, /Reviewer decision: revise/);
+  assert.match(markdown, /Reviewer note: Need policy owner wording review before accepting/);
+  assert.match(html, /Reviewer decision:<\/strong> revise/);
+  assert.match(html, /Reviewer note:<\/strong> Need policy owner wording review before accepting/);
 });
 
 test("buildMarkdownExport summarizes the current visible analysis view", () => {

@@ -879,6 +879,61 @@ button:hover,
   background: rgba(255, 255, 255, 0.02);
 }
 
+.decision-card {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+}
+
+.decision-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.decision-card__header h5 {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--accent-2);
+}
+
+.decision-card__controls {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.decision-control {
+  display: grid;
+  gap: 4px;
+}
+
+.decision-control--note {
+  min-width: 0;
+}
+
+.decision-note-input {
+  min-height: 76px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 0.78rem;
+  resize: vertical;
+}
+
+.decision-note-input:focus {
+  outline: none;
+  border-color: var(--info);
+}
+
 .redline-disclosure summary {
   cursor: pointer;
   list-style: none;
@@ -1801,6 +1856,10 @@ button:hover,
 }
 
 @media (max-width: 720px) {
+  .decision-card__controls {
+    grid-template-columns: 1fr;
+  }
+
   .redline-copy-grid {
     grid-template-columns: 1fr;
   }
