@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { analyzeDocuments } from "../docs/analysis.mjs";
-import { buildCsvExport, buildExportPayload, buildMarkdownExport, buildRequirementRedlineModel } from "../docs/app.mjs";
+import {
+  buildConsolidatedRedlineReportHtml,
+  buildCsvExport,
+  buildExportPayload,
+  buildMarkdownExport,
+  buildRequirementRedlineModel,
+} from "../docs/app.mjs";
 
 test("buildCsvExport includes requirement-level mapping review fields", () => {
   const result = analyzeDocuments(
@@ -113,4 +119,47 @@ test("buildRequirementRedlineModel distinguishes ready and blocked redlines", ()
   const blockedGroup = blockedResult.requirementGroups[0];
   const blockedRedline = buildRequirementRedlineModel(blockedResult, blockedGroup);
   assert.equal(blockedRedline.autoRedlineStatus, "blocked");
+});
+
+test("buildConsolidatedRedlineReportHtml renders grouped requirement redlines", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Records Retention Policy",
+        source: "manual://a",
+        text: "Retention Requirements\n\nRecords must be retained for seven years.",
+      },
+      {
+        id: "b",
+        title: "Records Retention Policy Copy",
+        source: "manual://b",
+        text: "Retention Requirements\n\nRecords must be retained for seven years across all entities.",
+      },
+      {
+        id: "c",
+        title: "Complaint Escalation Policy",
+        source: "manual://c",
+        text: "Complaint Escalation\n\nCustomer complaints must be escalated to Compliance within one business day.",
+      },
+      {
+        id: "d",
+        title: "Complaint Escalation Procedure",
+        source: "manual://d",
+        text: "Complaint Escalation Workflow\n\nStep 1 escalate customer complaints to Compliance within one business day. Step 2 archive the escalation record.",
+      },
+    ],
+    0.35
+  );
+
+  const payload = buildExportPayload(result, [], "", "all", 0.35);
+  const html = buildConsolidatedRedlineReportHtml(payload);
+
+  assert.match(html, /Consolidated Redline Report/);
+  assert.match(html, /Requirement Group 1/);
+  assert.match(html, /Current canonical text/);
+  assert.match(html, /Proposed consolidated text/);
+  assert.match(html, /Inline redline/);
+  assert.match(html, /Side-by-side diff/);
+  assert.match(html, /Mapped requirements/);
 });

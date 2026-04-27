@@ -10,7 +10,7 @@ import { runRedlineCompare } from "./redline.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 5:52 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 6:00 PM EDT";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
@@ -945,6 +945,7 @@ function buildExportStepMarkup() {
           <span class="doc-badge doc-badge--warn">Issues ${filtered.issues.length}</span>
         </div>
         <div class="control-row">
+          <button class="primary-button" type="button" data-export-format="redline">Export Redline Report</button>
           <button class="primary-button" type="button" data-export-format="csv">Export CSV</button>
           <button class="ghost-button" type="button" data-export-format="md">Export Markdown</button>
         </div>
@@ -1912,6 +1913,296 @@ function csvEscape(value) {
   return stringValue;
 }
 
+function buildRedlineSectionHtml(result, group, index) {
+  const redline = buildRequirementRedlineModel(result, group);
+  if (!redline) {
+    return "";
+  }
+
+  const requirements = group.requirementIds
+    .map((id) => result.requirements.find((requirement) => requirement.requirementId === id))
+    .filter(Boolean);
+  const statusClass =
+    redline.autoRedlineStatus === "ready"
+      ? "ok"
+      : redline.autoRedlineStatus === "caution"
+        ? "warn"
+        : "blocked";
+  const checksText = Object.entries(group.checks)
+    .map(([label, value]) => `${formatLabel(label)} = ${Array.isArray(value) ? value.join("; ") : value}`)
+    .join("; ");
+  const inlineHtml = buildInlineDiffHtml(redline.compareResult.segments);
+  const sideBySideHtml = redline.compareResult.side_by_side
+    .map(
+      (row) => `
+        <tr>
+          <td class="${row.type === "remove" || row.type === "replace" ? "removed-cell" : ""}">${escapeHtml(row.left || "")}</td>
+          <td class="${row.type === "add" || row.type === "replace" ? "added-cell" : ""}">${escapeHtml(row.right || "")}</td>
+        </tr>
+      `
+    )
+    .join("");
+  const requirementItems = requirements
+    .map(
+      (requirement) => `
+        <li>
+          <strong>${escapeHtml(requirement.sourceDocumentTitle)}</strong>
+          <span>${escapeHtml(requirement.sourceDocumentType)} | ${escapeHtml(requirement.sourceLocation.section || "Document body")}</span>
+          <p>${escapeHtml(requirement.requirementText)}</p>
+        </li>
+      `
+    )
+    .join("");
+
+  return `
+    <section class="group-card">
+      <div class="group-card__header">
+        <div>
+          <p class="eyebrow">Requirement Group ${index + 1}</p>
+          <h2>${escapeHtml(redline.primary.sourceDocumentTitle)}</h2>
+        </div>
+        <div class="badge-row">
+          <span class="badge ${statusClass}">${escapeHtml(redline.autoRedlineStatus)}</span>
+          <span class="badge">${escapeHtml(group.recommendationBucket)}</span>
+          <span class="badge">Similarity ${group.avgInternalSimilarity.toFixed(4)}</span>
+        </div>
+      </div>
+      <p class="helper">${escapeHtml(redline.reviewNote)}</p>
+      <p class="helper"><strong>Recommendation:</strong> ${escapeHtml(group.recommendation)}</p>
+      <p class="helper"><strong>Checks:</strong> ${escapeHtml(checksText)}</p>
+      <div class="copy-grid">
+        <article class="copy-card">
+          <h3>Current canonical text</h3>
+          <p>${escapeHtml(redline.primary.requirementText)}</p>
+        </article>
+        <article class="copy-card">
+          <h3>Proposed consolidated text</h3>
+          <p>${escapeHtml(redline.proposedText)}</p>
+        </article>
+      </div>
+      <h3>Inline redline</h3>
+      <div class="inline-box">${inlineHtml}</div>
+      <h3>Side-by-side diff</h3>
+      <table>
+        <thead>
+          <tr><th>Current</th><th>Proposed</th></tr>
+        </thead>
+        <tbody>${sideBySideHtml}</tbody>
+      </table>
+      <h3>Mapped requirements</h3>
+      <ul class="requirement-items">${requirementItems}</ul>
+    </section>
+  `;
+}
+
+export function buildConsolidatedRedlineReportHtml(payload) {
+  const groups = payload.filtered.groups;
+  const quickWinCount = groups.filter((group) => group.recommendationBucket === "quick-win").length;
+  const materialCount = groups.filter((group) => group.recommendationBucket === "material-change").length;
+  const sections = groups
+    .map((group, index) => buildRedlineSectionHtml(payload.sourceResult, group, index))
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Policy Rationalization Redline Report</title>
+  <style>
+    :root {
+      --bg: #1f2228;
+      --card: #2f343b;
+      --panel: #16181d;
+      --line: #464b54;
+      --ink: #ffffff;
+      --muted: #bcc3ca;
+      --accent: #7cacff;
+      --ok: #a3d795;
+      --warn: #ffd966;
+      --danger: #ff8d8d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Cash Sans", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+    main {
+      width: min(1180px, 94vw);
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+    .hero, .group-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .hero { margin-bottom: 14px; }
+    .hero h1, .group-card h2, .group-card h3 { margin: 0 0 10px; }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .helper { color: var(--muted); margin: 8px 0 0; }
+    .meta-grid, .copy-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .meta-card, .copy-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .group-card { margin-top: 14px; }
+    .group-card__header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .badge {
+      display: inline-flex;
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--accent);
+      background: rgba(124, 172, 255, 0.12);
+      font-size: 0.74rem;
+      font-weight: 700;
+    }
+    .badge.ok {
+      color: var(--ok);
+      background: rgba(163, 215, 149, 0.12);
+    }
+    .badge.warn {
+      color: var(--warn);
+      background: rgba(255, 217, 102, 0.12);
+    }
+    .badge.blocked {
+      color: var(--danger);
+      background: rgba(255, 141, 141, 0.12);
+    }
+    .inline-box {
+      margin-top: 8px;
+      padding: 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      white-space: pre-wrap;
+    }
+    .redline-token--add {
+      background: rgba(163, 215, 149, 0.12);
+      color: #dcf3d5;
+    }
+    .redline-token--remove {
+      background: rgba(255, 141, 141, 0.12);
+      color: #ffbcbc;
+      text-decoration: line-through;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px;
+      vertical-align: top;
+      text-align: left;
+      white-space: pre-wrap;
+    }
+    th {
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .removed-cell {
+      background: rgba(255, 141, 141, 0.1);
+      color: #ffbcbc;
+    }
+    .added-cell {
+      background: rgba(163, 215, 149, 0.1);
+      color: #dcf3d5;
+    }
+    .requirement-items {
+      list-style: none;
+      padding: 0;
+      margin: 10px 0 0;
+      display: grid;
+      gap: 8px;
+    }
+    .requirement-items li {
+      padding: 10px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+    .requirement-items span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: 2px;
+    }
+    .requirement-items p {
+      margin: 6px 0 0;
+    }
+    @media (max-width: 720px) {
+      .meta-grid, .copy-grid {
+        grid-template-columns: 1fr;
+      }
+      .group-card__header {
+        flex-direction: column;
+      }
+      .badge-row {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Policy Rationalization</p>
+      <h1>Consolidated Redline Report</h1>
+      <p class="helper">${escapeHtml(payload.summary)}</p>
+      <div class="meta-grid">
+        <article class="meta-card">
+          <h3>Report context</h3>
+          <p>Generated: ${escapeHtml(payload.createdAt)}</p>
+          <p>Threshold: ${escapeHtml(payload.threshold.toFixed(2))}</p>
+          <p>Filter: ${escapeHtml(payload.filter)}</p>
+          <p>Search: ${escapeHtml(payload.query || "None")}</p>
+        </article>
+        <article class="meta-card">
+          <h3>Visible review scope</h3>
+          <p>Requirement groups: ${groups.length}</p>
+          <p>Quick wins: ${quickWinCount}</p>
+          <p>Material changes: ${materialCount}</p>
+          <p>Requirements in view: ${payload.filtered.requirements.length}</p>
+        </article>
+      </div>
+    </section>
+    ${sections || `<section class="group-card"><h2>No visible requirement groups</h2><p class="helper">The current filter did not surface any mapped requirement groups to redline.</p></section>`}
+  </main>
+</body>
+</html>`;
+}
+
 export function buildCsvExport(payload) {
   const rows = [
     [
@@ -2190,6 +2481,16 @@ function exportCurrentView(format) {
       "text/csv;charset=utf-8"
     );
     renderStatus("Exported CSV for the current filtered view.", "success");
+    return;
+  }
+
+  if (format === "redline") {
+    downloadTextFile(
+      `policy-rationalization-redline-${dateLabel}-${filterLabel}.html`,
+      buildConsolidatedRedlineReportHtml(payload),
+      "text/html;charset=utf-8"
+    );
+    renderStatus("Exported consolidated redline report for the current filtered view.", "success");
     return;
   }
 
