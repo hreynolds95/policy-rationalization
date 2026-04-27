@@ -949,21 +949,17 @@ button:hover,
 
 .doc-type-control {
   display: grid;
-  gap: 4px;
-  min-width: 150px;
-  padding: 7px 9px;
-  border-radius: var(--radius-md);
-  background: var(--bg);
-  border: 1px solid var(--line);
+  gap: 3px;
+  min-width: 118px;
   text-transform: none;
   font-weight: 400;
   color: var(--ink);
 }
 
 .doc-type-control__label {
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   color: var(--muted);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   font-weight: 700;
 }
 
@@ -971,11 +967,11 @@ button:hover,
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--ink);
-  padding: 7px 9px;
+  padding: 5px 8px;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
 }
 
 .doc-type-select:focus {

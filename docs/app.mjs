@@ -1387,7 +1387,7 @@ function buildDocumentTypeOverrideControl(document) {
 
   return `
     <label class="doc-type-control" for="${selectId}">
-      <span class="doc-type-control__label">Review level</span>
+      <span class="doc-type-control__label">Level</span>
       <select
         class="doc-type-select"
         id="${selectId}"
