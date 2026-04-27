@@ -1216,6 +1216,8 @@ function buildSummary(result) {
   const levelReviewCount = result.documents.filter(
     (document) => document.documentLevel.levelFit !== "aligned"
   ).length;
+  const quickWinCount = result.groups.filter((group) => group.recommendationBucket === "quick-win").length;
+  const materialChangeCount = result.groups.filter((group) => group.recommendationBucket === "material-change").length;
   if (!result.groups.length) {
     if (!result.edges.length) {
       return `No consolidation cluster cleared the current threshold. ${levelReviewCount ? `${levelReviewCount} document(s) still need level review before consolidation work.` : "The document set may simply be cleanly separated."}`;
@@ -1225,7 +1227,7 @@ function buildSummary(result) {
 
   const strongest = result.groups[0];
   const primary = result.documents.find((document) => document.id === strongest.recommendedPrimaryId);
-  return `${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. ${levelReviewCount ? `${levelReviewCount} document(s) show possible policy-versus-standard-versus-procedure level issues and should be corrected before consolidation.` : "The recommendation keeps required structure intact and pushes brand scope, regulatory coverage, and procedural content into explicit review checks."}`;
+  return `${strongest.documentIds.length} documents cluster around ${primary.title} as the strongest canonical candidate. ${quickWinCount} quick win group(s) and ${materialChangeCount} material change group(s) are visible. ${levelReviewCount ? `${levelReviewCount} document(s) show possible policy-versus-standard-versus-procedure level issues and should be corrected before consolidation.` : "The recommendation keeps required structure intact and pushes brand scope, regulatory coverage, and procedural content into explicit review checks."}`;
 }
 
 function buildLevelMarkup(documents) {
@@ -1267,8 +1269,8 @@ function buildGroupMarkup(result, groups) {
     return `<article class="result-card"><p>No duplicate groups were found at the current threshold.</p></article>`;
   }
 
-  return groups
-    .map((group, index) => {
+  const renderGroupCard = (group) => {
+      const groupIndex = result.groups.findIndex((candidate) => candidate.recommendedPrimaryId === group.recommendedPrimaryId);
       const documents = group.documentIds
         .map((id) => result.documents.find((document) => document.id === id))
         .filter(Boolean);
@@ -1278,9 +1280,14 @@ function buildGroupMarkup(result, groups) {
           <div class="result-card__header result-card__header--tight">
             <div>
               <h4>${primary.title}</h4>
-              <p class="result-card__meta">Group ${index + 1}</p>
+              <p class="result-card__meta">Group ${groupIndex + 1}</p>
             </div>
-            <span class="pill">${group.avgInternalSimilarity.toFixed(4)} similarity</span>
+            <div class="result-card__badges">
+              <span class="doc-badge ${group.recommendationBucket === "quick-win" ? "doc-badge--ok" : "doc-badge--warn"}">
+                ${group.recommendationBucket === "quick-win" ? "Quick win" : "Material change"}
+              </span>
+              <span class="pill">${group.avgInternalSimilarity.toFixed(4)} similarity</span>
+            </div>
           </div>
           <p class="result-card__summary">${group.recommendation}</p>
           <div class="check-grid">
@@ -1309,8 +1316,35 @@ function buildGroupMarkup(result, groups) {
           </ul>
         </article>
       `;
-    })
-    .join("");
+    };
+
+  const quickWins = groups.filter((group) => group.recommendationBucket === "quick-win");
+  const materialChanges = groups.filter((group) => group.recommendationBucket === "material-change");
+
+  return `
+    <div class="bucket-stack">
+      <section class="bucket-section">
+        <div class="bucket-section__header">
+          <h4>Quick wins</h4>
+          <span class="doc-badge doc-badge--ok">${quickWins.length}</span>
+        </div>
+        <p class="section-subtitle">Consolidation candidates that appear ready without significant rework to scope, level, or required compliance language.</p>
+        ${quickWins.length
+          ? quickWins.map((group) => renderGroupCard(group)).join("")
+          : `<article class="result-card"><p>No quick wins are visible in the current view.</p></article>`}
+      </section>
+      <section class="bucket-section">
+        <div class="bucket-section__header">
+          <h4>Material changes</h4>
+          <span class="doc-badge doc-badge--warn">${materialChanges.length}</span>
+        </div>
+        <p class="section-subtitle">Groups that should be treated as heavier rationalization work because scope, level, regulatory, or procedural issues need to be resolved first.</p>
+        ${materialChanges.length
+          ? materialChanges.map((group) => renderGroupCard(group)).join("")
+          : `<article class="result-card"><p>No material changes are visible in the current view.</p></article>`}
+      </section>
+    </div>
+  `;
 }
 
 function buildPairMarkup(result, edges) {
@@ -1461,6 +1495,7 @@ function buildDocumentViewModel(result) {
       canonicalTitle: group
         ? result.documents.find((candidate) => candidate.id === group.recommendedPrimaryId)?.title || ""
         : "",
+      recommendationBucket: group ? group.recommendationBucket : "",
     };
   });
 }
@@ -1581,6 +1616,7 @@ export function buildCsvExport(payload) {
       "group_label",
       "canonical_title",
       "needs_review",
+      "recommendation_bucket",
     ],
   ];
 
@@ -1596,6 +1632,7 @@ export function buildCsvExport(payload) {
       document.groupLabel || "",
       document.canonicalTitle || "",
       document.needsReview ? "yes" : "no",
+      document.recommendationBucket || "",
     ]);
   }
 
@@ -1603,6 +1640,8 @@ export function buildCsvExport(payload) {
 }
 
 export function buildMarkdownExport(payload) {
+  const quickWins = payload.filtered.groups.filter((group) => group.recommendationBucket === "quick-win");
+  const materialChanges = payload.filtered.groups.filter((group) => group.recommendationBucket === "material-change");
   const lines = [
     "# Policy Rationalization Analysis",
     "",
@@ -1620,23 +1659,47 @@ export function buildMarkdownExport(payload) {
     "## Snapshot",
     "",
     `- Visible duplicate groups: ${payload.filtered.groups.length}`,
+    `- Quick win groups: ${quickWins.length}`,
+    `- Material change groups: ${materialChanges.length}`,
     `- Visible documents: ${payload.filtered.documents.length}`,
     `- Visible similarity pairs: ${payload.filtered.edges.length}`,
     `- Visible import issues: ${payload.filtered.issues.length}`,
     "",
-    "## Consolidation Groups",
+    "## Quick Wins",
     "",
   ];
 
-  if (!payload.filtered.groups.length) {
-    lines.push("No duplicate groups are visible in the current view.", "");
+  if (!quickWins.length) {
+    lines.push("No quick win groups are visible in the current view.", "");
   } else {
-    payload.filtered.groups.forEach((group, index) => {
+    quickWins.forEach((group, index) => {
       const groupDocuments = group.documentIds
         .map((id) => payload.filtered.documents.find((document) => document.id === id))
         .filter(Boolean);
       lines.push(`### Group ${index + 1}`);
       lines.push("");
+      lines.push(`- Recommendation bucket: Quick win`);
+      lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
+      lines.push(`- Recommendation: ${group.recommendation}`);
+      lines.push(`- Checks: ${Object.entries(group.checks).map(([label, value]) => `${formatLabel(label)} = ${value}`).join("; ")}`);
+      lines.push("- Documents:");
+      lines.push(...groupDocuments.map((document) => `  - ${document.title} (${document.documentLevel.inferredType})`));
+      lines.push("");
+    });
+  }
+
+  lines.push("## Material Changes", "");
+
+  if (!materialChanges.length) {
+    lines.push("No material change groups are visible in the current view.", "");
+  } else {
+    materialChanges.forEach((group, index) => {
+      const groupDocuments = group.documentIds
+        .map((id) => payload.filtered.documents.find((document) => document.id === id))
+        .filter(Boolean);
+      lines.push(`### Group ${index + 1}`);
+      lines.push("");
+      lines.push(`- Recommendation bucket: Material change`);
       lines.push(`- Average similarity: ${group.avgInternalSimilarity.toFixed(4)}`);
       lines.push(`- Recommendation: ${group.recommendation}`);
       lines.push(`- Checks: ${Object.entries(group.checks).map(([label, value]) => `${formatLabel(label)} = ${value}`).join("; ")}`);

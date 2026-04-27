@@ -848,6 +848,14 @@ button:hover,
   margin: 0;
 }
 
+.result-card__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .result-card__meta {
   margin: 4px 0 0;
   color: var(--muted);
@@ -858,6 +866,27 @@ button:hover,
   margin: 10px 0 0;
   color: var(--accent-2);
   line-height: 1.5;
+}
+
+.bucket-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.bucket-section {
+  display: grid;
+  gap: 10px;
+}
+
+.bucket-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bucket-section__header h4 {
+  margin: 0;
 }
 
 .pill {

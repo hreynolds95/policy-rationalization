@@ -133,3 +133,39 @@ test("analyzeDocuments supports reviewer document type overrides", () => {
   assert.equal(overridden.documentLevel.overrideType, "policy");
   assert.equal(result.groups[0].checks.documentLevelConsistency, "consistent");
 });
+
+test("analyzeDocuments buckets consolidation recommendations into quick wins and material changes", () => {
+  const result = analyzeDocuments(
+    [
+      {
+        id: "a",
+        title: "Records Retention Policy",
+        source: "manual://a",
+        text: "records retention policy records retention policy records retention requirements legal regulatory brand entities roles and responsibilities",
+      },
+      {
+        id: "b",
+        title: "Records Retention Policy Copy",
+        source: "manual://b",
+        text: "records retention policy records retention policy records retention requirements legal regulatory brand entities roles and responsibilities",
+      },
+      {
+        id: "c",
+        title: "Access Review Policy",
+        source: "manual://c",
+        text: "customer complaint policy customer complaint governance customer complaint evidence customer complaint review across brands and legal entities",
+      },
+      {
+        id: "d",
+        title: "Access Review Procedure",
+        source: "manual://d",
+        text: "customer complaint procedure customer complaint workflow customer complaint evidence. step 1 collect complaint evidence. step 2 validate complaint approvals. step 3 archive complaint records.",
+      },
+    ],
+    0.2
+  );
+
+  assert.equal(result.groups.length, 2);
+  assert.ok(result.groups.some((group) => group.recommendationBucket === "quick-win"));
+  assert.ok(result.groups.some((group) => group.recommendationBucket === "material-change"));
+});

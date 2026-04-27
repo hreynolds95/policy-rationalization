@@ -275,6 +275,18 @@ function buildRecommendation(group, documentById, checks) {
   return `Keep ${primary.title} as the canonical document and consolidate ${others.length} overlapping document(s) into its template without changing required structure or core roles language.${blockerSentence}`;
 }
 
+function classifyRecommendationBucket(checks) {
+  const materialTriggers = [
+    checks.brandScopeCoverage === "missing",
+    checks.regulatoryReflection === "missing",
+    checks.proceduralContentDetected === "yes",
+    checks.documentLevelConsistency === "mixed-level",
+    checks.documentLevelFit === "review-needed",
+  ];
+
+  return materialTriggers.some(Boolean) ? "material-change" : "quick-win";
+}
+
 export function buildDuplicateGroups(documents, edges) {
   const dsu = new DisjointSet();
   const edgeLookup = new Map();
@@ -337,6 +349,7 @@ export function buildDuplicateGroups(documents, edges) {
     groups.push({
       ...group,
       checks,
+      recommendationBucket: classifyRecommendationBucket(checks),
       recommendation: buildRecommendation(group, documentById, checks),
     });
   }
