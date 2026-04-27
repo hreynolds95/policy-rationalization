@@ -41,6 +41,45 @@ Owner: Alex Rivera
 4. Share with team on Thursday
 5. Publish to Blockcell`;
 
+const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
+const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+const JSPDF_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+
+let pdfJsLibPromise = null;
+let jsPdfPromise = null;
+
+function loadExternalScript(src, globalPathCheck) {
+  if (globalPathCheck()) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensurePdfJsLib() {
+  if (!pdfJsLibPromise) {
+    pdfJsLibPromise = loadExternalScript(PDFJS_CDN, () => Boolean(window.pdfjsLib)).then(() => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
+      return window.pdfjsLib;
+    });
+  }
+  return pdfJsLibPromise;
+}
+
+async function ensureJsPdfLib() {
+  if (!jsPdfPromise) {
+    jsPdfPromise = loadExternalScript(JSPDF_CDN, () => Boolean(window.jspdf)).then(() => window.jspdf);
+  }
+  return jsPdfPromise;
+}
+
 function setStatus(state = 'ready', detail = '') {
   const labels = {
     ready: 'Ready',
@@ -178,8 +217,23 @@ toggleInlineBtn?.addEventListener('click', () => {
 toggleSideBtn?.addEventListener('click', () => {
   const isVisible = !sideSectionEl.classList.contains('hidden');
   const next = !isVisible;
-  setResultSectionVisibility(sideSectionEl, next);
-  setToggleButtonState(toggleSideBtn, next, 'Show Side-by-Side', 'Hide Side-by-Side');
+  if (!next) {
+    setResultSectionVisibility(sideSectionEl, false);
+    setToggleButtonState(toggleSideBtn, false, 'Show Side-by-Side', 'Hide Side-by-Side');
+    return;
+  }
+
+  if (!lastResult) {
+    setStatus('needs_input', 'run compare first');
+    return;
+  }
+
+  setStatus('comparing', 'preparing side-by-side');
+  const rows = ensureSideBySide(lastResult);
+  renderSideBySide(rows);
+  setResultSectionVisibility(sideSectionEl, true);
+  setToggleButtonState(toggleSideBtn, true, 'Show Side-by-Side', 'Hide Side-by-Side');
+  setStatus('done');
 });
 
 function tokenizeWords(text) {
@@ -320,6 +374,16 @@ function buildSideBySide(oldText, newText) {
   return rows;
 }
 
+function ensureSideBySide(result) {
+  if (!result) return [];
+  if (Array.isArray(result.side_by_side)) return result.side_by_side;
+
+  const left = result.raw?.textA ?? '';
+  const right = result.raw?.textB ?? '';
+  result.side_by_side = buildSideBySide(left, right);
+  return result.side_by_side;
+}
+
 function countWords(text) {
   return (text.match(/\S+/g) || []).length;
 }
@@ -392,14 +456,8 @@ function renderSideBySide(rows) {
 }
 
 async function extractPdfText(arrayBuffer) {
-  if (!window.pdfjsLib) {
-    throw new Error('PDF parser not loaded. Refresh and try again.');
-  }
-
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-
-  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdfjsLib = await ensurePdfJsLib();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const pages = [];
 
   for (let i = 1; i <= pdf.numPages; i += 1) {
@@ -500,13 +558,13 @@ async function getInputsByMode() {
 function runCompare(textA, textB, source) {
   const tokenOps = myersDiff(tokenizeWords(textA), tokenizeWords(textB));
   const segments = mergeSegments(tokenOps);
-  const sideBySide = buildSideBySide(textA, textB);
   const summary = summarize(textA, textB, segments);
 
   return {
     summary,
     segments,
-    side_by_side: sideBySide,
+    side_by_side: null,
+    raw: { textA, textB },
     source,
     generated_at_utc: new Date().toISOString(),
   };
@@ -605,23 +663,30 @@ function downloadHtmlReport() {
     return;
   }
 
+  ensureSideBySide(lastResult);
   const html = buildReportHtml(lastResult);
   const name = `version-compare-report-${new Date().toISOString().replaceAll(':', '-')}.html`;
   downloadBlob(name, new Blob([html], { type: 'text/html;charset=utf-8' }));
   setStatus('done', 'HTML report downloaded');
 }
 
-function downloadPdfReport() {
+async function downloadPdfReport() {
   if (!lastResult) {
     setStatus('needs_input', 'run compare first');
     return;
   }
-  if (!window.jspdf || !window.jspdf.jsPDF) {
-    setStatus('error', 'PDF library not loaded. Refresh and try again');
+  ensureSideBySide(lastResult);
+  setStatus('comparing', 'building PDF');
+
+  let jspdf;
+  try {
+    jspdf = await ensureJsPdfLib();
+  } catch {
+    setStatus('error', 'PDF library could not be loaded');
     return;
   }
 
-  const { jsPDF } = window.jspdf;
+  const { jsPDF } = jspdf;
   const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -845,7 +910,6 @@ compareBtn.addEventListener('click', async () => {
 
     renderSummary(result.summary);
     renderInlineDiff(result.segments);
-    renderSideBySide(result.side_by_side);
 
     setExportEnabled(true);
     resultsEl.classList.remove('hidden');
