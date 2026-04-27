@@ -1766,15 +1766,33 @@ function resetWorkspace() {
   renderStatus("Workspace reset. Add demo data or your own documents to begin again.");
 }
 
-function loadDemoSetup() {
+function isSourcesWorkspaceEmpty() {
+  return (
+    !state.includeSampleData &&
+    !countUrlEntries() &&
+    !state.workspace.uploadedFiles.length &&
+    !countManualEntries()
+  );
+}
+
+function scrollToStepContent() {
+  document.querySelector("[data-step-content]")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+function loadDemoSetup({ announce = true } = {}) {
   state.includeSampleData = true;
   state.activeSourceTab = "urls";
   state.workspace.urlsText = SAMPLE_URLS.join("\n");
   persistState();
   renderApp();
-  renderStatus(
-    "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
-  );
+  if (announce) {
+    renderStatus(
+      "Demo setup loaded. The sample library is enabled and illustrative sample URLs are ready in the workspace."
+    );
+  }
 }
 
 async function runAnalysis() {
@@ -1922,10 +1940,10 @@ function syncThresholdFromInput(value) {
 function wireStepEvents(scope) {
   scope.querySelectorAll("[data-scroll-current]").forEach((button) => {
     button.addEventListener("click", () => {
-      document.querySelector("[data-step-content]")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      if (state.route === "sources" && isSourcesWorkspaceEmpty()) {
+        loadDemoSetup({ announce: true });
+      }
+      scrollToStepContent();
     });
   });
 
