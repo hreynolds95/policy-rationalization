@@ -981,9 +981,11 @@ function renderProgressHeader() {
           const disabled = stateLabel === "locked" || state.isBusy || isCurrent;
           if (isCurrent) {
             return `
-              <div
+              <button
                 class="wizard-route wizard-route--${stateLabel}"
+                type="button"
                 data-current-route="true"
+                data-scroll-current="true"
                 aria-current="step"
               >
                 <span class="wizard-route__number">${index + 1}</span>
@@ -991,7 +993,7 @@ function renderProgressHeader() {
                   <strong>${route.title}</strong>
                   <span>Current</span>
                 </span>
-              </div>
+              </button>
             `;
           }
           return `
@@ -1918,6 +1920,15 @@ function syncThresholdFromInput(value) {
 }
 
 function wireStepEvents(scope) {
+  scope.querySelectorAll("[data-scroll-current]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelector("[data-step-content]")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  });
+
   scope.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {
       goToRoute(button.getAttribute("data-route"));
