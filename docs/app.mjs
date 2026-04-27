@@ -8,9 +8,8 @@ import {
 } from "./analysis.mjs";
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
-const DEPLOYMENT_API_URL =
-  "https://api.github.com/repos/hreynolds95/policy-rationalization/pages/builds/latest";
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 2:09 PM EDT";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
@@ -409,26 +408,11 @@ function setStatusShellVisibility(isVisible) {
   shell.hidden = !isVisible;
 }
 
-async function loadDeploymentBadge() {
-  try {
-    const response = await fetch(DEPLOYMENT_API_URL, {
-      headers: {
-        Accept: "application/vnd.github+json",
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`GitHub API returned ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const updatedAt = payload.updated_at || payload.created_at;
-    setDeploymentBadge("Last updated:", formatDeploymentTimestamp(updatedAt));
-  } catch {
-    const fallback = typeof document !== "undefined" && document.lastModified
-      ? formatDeploymentTimestamp(document.lastModified)
-      : "timestamp unavailable";
-    setDeploymentBadge("Last updated:", fallback);
-  }
+function loadDeploymentBadge() {
+  const fallback = typeof document !== "undefined" && document.lastModified
+    ? formatDeploymentTimestamp(document.lastModified)
+    : "timestamp unavailable";
+  setDeploymentBadge("Last updated:", STATIC_LAST_UPDATED || fallback);
 }
 
 function computeWorkspaceReadiness() {
@@ -995,18 +979,32 @@ function renderProgressHeader() {
           const stateLabel = routeStates[route.id];
           const isCurrent = stateLabel === "current";
           const disabled = stateLabel === "locked" || state.isBusy || isCurrent;
+          if (isCurrent) {
+            return `
+              <div
+                class="wizard-route wizard-route--${stateLabel}"
+                data-current-route="true"
+                aria-current="step"
+              >
+                <span class="wizard-route__number">${index + 1}</span>
+                <span class="wizard-route__text">
+                  <strong>${route.title}</strong>
+                  <span>Current</span>
+                </span>
+              </div>
+            `;
+          }
           return `
             <button
               class="wizard-route wizard-route--${stateLabel}"
               type="button"
               data-route="${route.id}"
-              ${isCurrent ? 'data-current-route="true" aria-current="step"' : ""}
               ${disabled ? "disabled" : ""}
             >
               <span class="wizard-route__number">${index + 1}</span>
               <span class="wizard-route__text">
                 <strong>${route.title}</strong>
-                <span>${stateLabel === "locked" ? "Locked" : stateLabel === "complete" ? "Done" : stateLabel === "upcoming" ? "Up next" : "Current"}</span>
+                <span>${stateLabel === "locked" ? "Locked" : stateLabel === "complete" ? "Done" : "Up next"}</span>
               </span>
             </button>
           `;
@@ -2101,7 +2099,7 @@ function initialize() {
   restoreState();
   handleRouteChange();
   window.addEventListener("hashchange", handleRouteChange);
-  void loadDeploymentBadge();
+  loadDeploymentBadge();
   renderStatus("");
 }
 
