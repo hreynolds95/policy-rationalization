@@ -9,7 +9,7 @@ import {
 import { SAMPLE_DOCUMENTS, SAMPLE_URLS } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 2:09 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 27, 2026, 2:46 PM EDT";
 const WORKFLOW_SEQUENCE = [
   "levelSection",
   "groupsSection",
