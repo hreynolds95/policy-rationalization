@@ -38,7 +38,7 @@ body {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 1.25rem;
+  padding: 1.4rem;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
 
@@ -48,12 +48,15 @@ body {
 }
 
 .header p {
-  margin: 0.35rem 0 0;
+  margin: 0.45rem 0 0;
   color: var(--muted);
+  max-width: 58ch;
+  line-height: 1.45;
+  font-size: 0.94rem;
 }
 
 .help-disclosure {
-  margin: 0.9rem 0 1rem;
+  margin: 1rem 0 1.1rem;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #111;
@@ -97,9 +100,9 @@ body {
 }
 
 .mode-hint {
-  margin: 0 0 0.9rem;
+  margin: 0 0 1rem;
   color: #b9b9b9;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
 }
 
 .mode-btn {
@@ -129,7 +132,7 @@ body {
 
 .mode-panel {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.62rem;
 }
 
 .hidden {
@@ -137,8 +140,10 @@ body {
 }
 
 label {
-  margin-top: 0.3rem;
+  margin-top: 0.45rem;
   font-weight: 600;
+  color: #f0f0f0;
+  font-size: 0.93rem;
 }
 
 textarea,
@@ -159,7 +164,7 @@ input[type="url"]::placeholder {
 }
 
 .actions {
-  margin-top: 1rem;
+  margin-top: 1.25rem;
   display: flex;
   gap: 0.6rem;
   flex-wrap: wrap;
@@ -225,8 +230,9 @@ button:disabled {
 }
 
 .status {
-  margin-top: 0.9rem;
+  margin-top: 1rem;
   font-weight: 700;
+  font-size: 0.92rem;
 }
 
 .status.neutral {
@@ -242,18 +248,31 @@ button:disabled {
 }
 
 .results {
-  margin-top: 1.1rem;
+  margin-top: 1.35rem;
   border-top: 1px solid var(--border);
-  padding-top: 1rem;
+  padding-top: 1.2rem;
+}
+
+.results h2 {
+  margin: 0 0 0.42rem;
+  font-size: 1.02rem;
+  letter-spacing: 0.02em;
+  color: #f7f7f7;
+}
+
+.results h2 + .legend {
+  margin-top: 0.15rem;
 }
 
 #summary-list {
-  margin: 0;
+  margin: 0.15rem 0 0;
   padding-left: 1rem;
+  display: grid;
+  gap: 0.25rem;
 }
 
 .result-toggles {
-  margin-top: 0.9rem;
+  margin-top: 1.1rem;
   display: flex;
   gap: 0.55rem;
   flex-wrap: wrap;
@@ -267,12 +286,14 @@ button:disabled {
 }
 
 .result-section {
-  margin-top: 0.9rem;
+  margin-top: 1.15rem;
 }
 
 .legend {
   display: flex;
   gap: 0.7rem;
+  color: #d2d2d2;
+  font-size: 0.89rem;
 }
 
 .inline-diff {
@@ -300,6 +321,7 @@ button:disabled {
 }
 
 .table-wrap {
+  margin-top: 0.38rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow-x: auto;
@@ -326,7 +348,7 @@ th {
 
 @media (max-width: 720px) {
   .card {
-    padding: 1rem;
+    padding: 1.05rem;
   }
 
   .actions {
