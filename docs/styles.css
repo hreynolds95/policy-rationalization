@@ -823,6 +823,63 @@ button:hover,
   gap: 8px;
 }
 
+.action-strip {
+  display: grid;
+  gap: 12px;
+  border-color: rgba(124, 172, 255, 0.22);
+  background: linear-gradient(180deg, rgba(124, 172, 255, 0.05), rgba(124, 172, 255, 0.02));
+}
+
+.action-strip__copy h3 {
+  margin: 0 0 6px;
+}
+
+.action-strip__copy .section-subtitle {
+  margin: 0;
+}
+
+.action-strip__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.action-progress__labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.action-progress__labels strong {
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.action-progress__labels span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.action-progress__track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.action-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #9ed6ff);
+}
+
 .results-section {
   display: grid;
   gap: 8px;

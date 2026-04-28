@@ -13,7 +13,7 @@ import {
 } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 27, 2026, 7:01 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 28, 2026, 1:54 PM EDT";
 const GROUP_DECISION_OPTIONS = [
   { value: "accept", label: "Accept" },
   { value: "revise", label: "Revise" },
@@ -890,6 +890,124 @@ function buildDecisionSummaryBarMarkup(decisionSummary) {
   `;
 }
 
+function buildStepActionStripMarkup(routeId, options = {}) {
+  if (!state.analysisView.result) {
+    return "";
+  }
+
+  const result = state.analysisView.result;
+
+  if (routeId === "level-review") {
+    const hierarchyReviewCount = result.requirements.filter(
+      (requirement) => requirement.hierarchyReview.alignment !== "aligned"
+    ).length;
+    return `
+      <section class="panel table-panel action-strip">
+        <div class="action-strip__copy">
+          <p class="eyebrow">Next action</p>
+          <h3>Confirm requirement boundaries, then move into mapping</h3>
+          <p class="section-subtitle">Use this step to sanity-check extracted requirement units and source anchors. If the inventory looks right, continue to Step 3.</p>
+        </div>
+        <div class="action-strip__meta">
+          <span class="doc-badge">Docs ${result.documents.length}</span>
+          <span class="doc-badge">Reqs ${result.requirements.length}</span>
+          <span class="doc-badge ${hierarchyReviewCount ? "doc-badge--warn" : "doc-badge--ok"}">Hierarchy ${hierarchyReviewCount}</span>
+        </div>
+        <div class="control-row control-row--wrap">
+          <button class="ghost-button" type="button" data-route="sources">Back to sources</button>
+          <button class="primary-button" type="button" data-route="groups">Continue to Step 3</button>
+        </div>
+      </section>
+    `;
+  }
+
+  if (routeId === "groups") {
+    const visibleGroups = options.filtered?.groups || [];
+    const captured = visibleGroups.filter((group) => hasGroupDecision(group)).length;
+    const undecided = visibleGroups.length - captured;
+    const completionPct = visibleGroups.length ? Math.round((captured / visibleGroups.length) * 100) : 0;
+    const changeSummaryCount = options.changeSummaryCount || 0;
+    return `
+      <section class="panel table-panel action-strip">
+        <div class="action-strip__copy">
+          <p class="eyebrow">Next action</p>
+          <h3>Work through undecided groups and capture a disposition</h3>
+          <p class="section-subtitle">Start with groups that still need a decision. Use the redline preview only when the canonical wording is actually changing.</p>
+        </div>
+        <div class="action-progress">
+          <div class="action-progress__labels">
+            <strong>${captured} of ${visibleGroups.length} visible groups decided</strong>
+            <span>${completionPct}% complete</span>
+          </div>
+          <div class="action-progress__track">
+            <span class="action-progress__fill" style="width: ${completionPct}%"></span>
+          </div>
+          <div class="action-strip__meta">
+            <span class="doc-badge ${undecided ? "doc-badge--warn" : "doc-badge--ok"}">Undecided ${undecided}</span>
+            <span class="doc-badge">Change summary ${changeSummaryCount}</span>
+          </div>
+        </div>
+        <div class="control-row control-row--wrap">
+          <button class="ghost-button" type="button" data-set-filter="${state.analysisView.filter === "undecided" ? "all" : "undecided"}">
+            ${state.analysisView.filter === "undecided" ? "Show all groups" : "Show undecided only"}
+          </button>
+          <button class="ghost-button" type="button" data-open-change-summary>Open change summary</button>
+          <button class="primary-button" type="button" data-route="details">Continue to Step 4</button>
+        </div>
+      </section>
+    `;
+  }
+
+  if (routeId === "details") {
+    const filtered = options.filtered || { documents: [], requirements: [], edges: [] };
+    return `
+      <section class="panel table-panel action-strip">
+        <div class="action-strip__copy">
+          <p class="eyebrow">Next action</p>
+          <h3>Use this page only when a group needs supporting context</h3>
+          <p class="section-subtitle">Search the supporting evidence, confirm whether the mapping is real, then continue to export once you have enough confidence to share.</p>
+        </div>
+        <div class="action-strip__meta">
+          <span class="doc-badge">Docs ${filtered.documents.length}</span>
+          <span class="doc-badge">Reqs ${filtered.requirements.length}</span>
+          <span class="doc-badge">Pairs ${filtered.edges.length}</span>
+        </div>
+        <div class="control-row control-row--wrap">
+          <button class="ghost-button" type="button" data-set-filter="${state.analysisView.filter === "undecided" ? "all" : "undecided"}">
+            ${state.analysisView.filter === "undecided" ? "Show all support" : "Focus undecided support"}
+          </button>
+          <button class="primary-button" type="button" data-route="export">Continue to Step 5</button>
+        </div>
+      </section>
+    `;
+  }
+
+  if (routeId === "export") {
+    const filtered = options.filtered || { groups: [], issues: [] };
+    const decisionSummary = summarizeDecisions(filtered.groups, state.analysisView.groupDecisions);
+    return `
+      <section class="panel table-panel action-strip">
+        <div class="action-strip__copy">
+          <p class="eyebrow">Next action</p>
+          <h3>Review blockers, then export the current review slice</h3>
+          <p class="section-subtitle">This final step is for packaging the current filtered view. Review the blockers panel below before you share any output.</p>
+        </div>
+        <div class="action-strip__meta">
+          <span class="doc-badge">Visible groups ${filtered.groups.length}</span>
+          <span class="doc-badge">Decisions ${decisionSummary.captured}</span>
+          <span class="doc-badge ${filtered.issues.length ? "doc-badge--warn" : "doc-badge--ok"}">Issues ${filtered.issues.length}</span>
+        </div>
+        <div class="control-row control-row--wrap">
+          <button class="ghost-button" type="button" data-open-change-summary>Open change summary</button>
+          <button class="primary-button" type="button" data-export-format="redline">Export redline report</button>
+        </div>
+      </section>
+    `;
+  }
+
+  return "";
+}
+
 function buildHierarchyReferenceMarkup() {
   return `
     <section class="panel table-panel">
@@ -922,6 +1040,7 @@ function buildLevelReviewStepMarkup() {
     <section class="wizard-step-page">
       ${buildStepHero("level-review")}
       ${buildAnalysisSummaryMarkup()}
+      ${buildStepActionStripMarkup("level-review")}
       ${buildHierarchyReferenceMarkup()}
       <section class="panel table-panel">
         <div class="step-card-header">
@@ -948,6 +1067,7 @@ function buildGroupsStepMarkup() {
     <section class="wizard-step-page">
       ${buildStepHero("groups")}
       ${buildAnalysisSummaryMarkup()}
+      ${buildStepActionStripMarkup("groups", { filtered, changeSummaryCount })}
       <section class="panel table-panel">
         <div class="step-card-header">
           <h3>Requirement mapping groups</h3>
@@ -990,6 +1110,7 @@ function buildDetailsStepMarkup() {
     <section class="wizard-step-page">
       ${buildStepHero("details")}
       ${buildAnalysisSummaryMarkup()}
+      ${buildStepActionStripMarkup("details", { filtered })}
       <section class="panel table-panel">
         <div class="review-toolbar">
           <div class="search-bar review-toolbar__search">
@@ -1058,6 +1179,7 @@ function buildExportStepMarkup() {
   return `
     <section class="wizard-step-page">
       ${buildStepHero("export")}
+      ${buildStepActionStripMarkup("export", { filtered })}
       <section class="panel table-panel export-finish-card">
         <div class="step-card-header">
           <h3>Download current review view</h3>
@@ -3431,6 +3553,14 @@ function wireStepEvents(scope) {
   scope.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {
       goToRoute(button.getAttribute("data-route"));
+    });
+  });
+
+  scope.querySelectorAll("[data-set-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.analysisView.filter = button.getAttribute("data-set-filter") || "all";
+      persistState();
+      renderApp();
     });
   });
 
