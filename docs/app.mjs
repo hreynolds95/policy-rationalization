@@ -1960,7 +1960,12 @@ function buildRequirementRedlineMarkup(result, group) {
           </div>
         </div>
         ${buildDocumentContextRedlineMarkup(result, model)}
-        ${buildSideBySideDiffHtml(model.compareResult.side_by_side)}
+        <details class="supporting-disclosure supporting-disclosure--nested">
+          <summary>View side-by-side diff</summary>
+          <div class="supporting-disclosure__content">
+            ${buildSideBySideDiffHtml(model.compareResult.side_by_side)}
+          </div>
+        </details>
       </div>
     </details>
   `;
@@ -2152,39 +2157,49 @@ function buildRequirementGroupMarkup(result, groups) {
         </div>
         <p class="result-card__summary">${primary.requirementText}</p>
         <p class="result-card__summary">${group.recommendation}</p>
-        <div class="check-grid">
-          ${Object.entries(group.checks)
-            .filter(([label]) => label !== "hierarchyIssues")
-            .map(
-              ([label, value]) => `
-                <div class="check">
-                  <span class="check__label">${formatLabel(label)}</span>
-                  <strong class="check__value">${value}</strong>
-                </div>
-              `
-            )
-            .join("")}
-        </div>
-        ${group.checks.hierarchyIssues?.length ? `<p class="document-note">${group.checks.hierarchyIssues.join("; ")}</p>` : ""}
         ${buildGroupDecisionMarkup(group)}
         ${buildRequirementRedlineMarkup(result, group)}
-        <ul class="requirement-list">
-          ${requirements.map((requirement) => `
-            <li class="requirement-row">
-              <div class="requirement-row__main">
-                <strong>${requirement.sourceDocumentTitle}</strong>
-                <p>${requirement.requirementText}</p>
-                <span>${requirement.sourceLocation.section || "Document body"} | ${requirement.sourceDocumentType}</span>
-              </div>
-              <div class="requirement-row__meta">
-                <span class="doc-badge">${requirement.requirementType}</span>
-                <span class="doc-badge ${requirement.hierarchyReview.alignment === "aligned" ? "doc-badge--ok" : "doc-badge--warn"}">
-                  ${requirement.hierarchyReview.alignment}
-                </span>
-              </div>
-            </li>
-          `).join("")}
-        </ul>
+        <details class="supporting-disclosure">
+          <summary>View policy checks</summary>
+          <div class="supporting-disclosure__content">
+            <div class="check-grid">
+              ${Object.entries(group.checks)
+                .filter(([label]) => label !== "hierarchyIssues")
+                .map(
+                  ([label, value]) => `
+                    <div class="check">
+                      <span class="check__label">${formatLabel(label)}</span>
+                      <strong class="check__value">${value}</strong>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+            ${group.checks.hierarchyIssues?.length ? `<p class="document-note">${group.checks.hierarchyIssues.join("; ")}</p>` : ""}
+          </div>
+        </details>
+        <details class="supporting-disclosure">
+          <summary>View mapped requirements (${requirements.length})</summary>
+          <div class="supporting-disclosure__content">
+            <ul class="requirement-list">
+              ${requirements.map((requirement) => `
+                <li class="requirement-row">
+                  <div class="requirement-row__main">
+                    <strong>${requirement.sourceDocumentTitle}</strong>
+                    <p>${requirement.requirementText}</p>
+                    <span>${requirement.sourceLocation.section || "Document body"} | ${requirement.sourceDocumentType}</span>
+                  </div>
+                  <div class="requirement-row__meta">
+                    <span class="doc-badge">${requirement.requirementType}</span>
+                    <span class="doc-badge ${requirement.hierarchyReview.alignment === "aligned" ? "doc-badge--ok" : "doc-badge--warn"}">
+                      ${requirement.hierarchyReview.alignment}
+                    </span>
+                  </div>
+                </li>
+              `).join("")}
+            </ul>
+          </div>
+        </details>
       </article>
     `;
   };
