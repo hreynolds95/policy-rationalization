@@ -52,6 +52,9 @@ const JSPDF_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.
 
 let pdfJsLibPromise = null;
 let jsPdfPromise = null;
+const MAX_CHARS_PER_INPUT = 250000;
+const MAX_TOTAL_CHARS = 400000;
+const MAX_WORDS_PER_INPUT = 50000;
 
 function loadExternalScript(src, globalPathCheck) {
   if (globalPathCheck()) {
@@ -59,30 +62,85 @@ function loadExternalScript(src, globalPathCheck) {
   }
 
   return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error(`Failed to load script: ${src}`)), {
+        once: true,
+      });
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = src;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    script.onerror = () => {
+      script.remove();
+      reject(new Error(`Failed to load script: ${src}`));
+    };
     document.head.appendChild(script);
   });
 }
 
 async function ensurePdfJsLib() {
   if (!pdfJsLibPromise) {
-    pdfJsLibPromise = loadExternalScript(PDFJS_CDN, () => Boolean(window.pdfjsLib)).then(() => {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
-      return window.pdfjsLib;
-    });
+    pdfJsLibPromise = loadExternalScript(PDFJS_CDN, () => Boolean(window.pdfjsLib))
+      .then(() => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
+        return window.pdfjsLib;
+      })
+      .catch((error) => {
+        pdfJsLibPromise = null;
+        throw error;
+      });
   }
   return pdfJsLibPromise;
 }
 
 async function ensureJsPdfLib() {
   if (!jsPdfPromise) {
-    jsPdfPromise = loadExternalScript(JSPDF_CDN, () => Boolean(window.jspdf)).then(() => window.jspdf);
+    jsPdfPromise = loadExternalScript(JSPDF_CDN, () => Boolean(window.jspdf))
+      .then(() => window.jspdf)
+      .catch((error) => {
+        jsPdfPromise = null;
+        throw error;
+      });
   }
   return jsPdfPromise;
+}
+
+function countWords(value) {
+  return String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function validateInputSizes(textA, textB) {
+  const charA = textA.length;
+  const charB = textB.length;
+  const totalChars = charA + charB;
+  const wordsA = countWords(textA);
+  const wordsB = countWords(textB);
+
+  if (charA > MAX_CHARS_PER_INPUT || charB > MAX_CHARS_PER_INPUT) {
+    throw new Error(
+      `Each input must be under ${MAX_CHARS_PER_INPUT.toLocaleString()} characters (original: ${charA.toLocaleString()}, updated: ${charB.toLocaleString()}).`
+    );
+  }
+
+  if (totalChars > MAX_TOTAL_CHARS) {
+    throw new Error(
+      `Combined input must be under ${MAX_TOTAL_CHARS.toLocaleString()} characters (current: ${totalChars.toLocaleString()}).`
+    );
+  }
+
+  if (wordsA > MAX_WORDS_PER_INPUT || wordsB > MAX_WORDS_PER_INPUT) {
+    throw new Error(
+      `Each input must be under ${MAX_WORDS_PER_INPUT.toLocaleString()} words (original: ${wordsA.toLocaleString()}, updated: ${wordsB.toLocaleString()}).`
+    );
+  }
 }
 
 function setStatus(state = 'ready', detail = '') {
@@ -761,6 +819,7 @@ async function compareCurrentInputs() {
 
   try {
     const { textA, textB, source } = await getInputsByMode();
+    validateInputSizes(textA, textB);
     const result = runRedlineCompare(textA, textB, source);
     lastResult = result;
 
