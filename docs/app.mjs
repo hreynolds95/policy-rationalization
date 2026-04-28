@@ -1115,6 +1115,8 @@ function buildGroupsStepMarkup() {
   );
   const groupsHtml = buildRequirementGroupMarkup(state.analysisView.result, filtered.groups);
   const changeSummaryCount = buildProposedChangeRecords(state.analysisView.result, filtered.groups).length;
+  const captured = filtered.groups.filter((group) => hasGroupDecision(group)).length;
+  const completionPct = filtered.groups.length ? Math.round((captured / filtered.groups.length) * 100) : 0;
   return `
     <section class="wizard-step-page">
       ${buildStepHero("groups")}
@@ -1125,19 +1127,25 @@ function buildGroupsStepMarkup() {
           <h3>Requirement mapping groups</h3>
           <p class="section-subtitle">Review cross-document requirement matches, 1:1 mapping conflicts, hierarchy watch-outs, and inline redline proposals.</p>
         </div>
-        <div class="filter-toolbar filter-toolbar--between">
-          <div class="toggle-group" data-filter-group>
-            ${buildFilterButton("all", "All", state.analysisView.filter)}
-            ${buildFilterButton("undecided", "Undecided", state.analysisView.filter)}
-            ${buildFilterButton("completed", "Completed", state.analysisView.filter)}
-            ${buildFilterButton("level", "Hierarchy review", state.analysisView.filter)}
-            ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
-            ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
+        <div class="groups-sticky-toolbar">
+          <div class="groups-sticky-toolbar__progress">
+            <strong>${captured} of ${filtered.groups.length} decided</strong>
+            <span>${completionPct}% complete</span>
           </div>
-          <div class="control-row control-row--wrap">
-            <button class="ghost-button ghost-button--small" type="button" data-open-change-summary>
-              Change summary (${changeSummaryCount})
-            </button>
+          <div class="filter-toolbar filter-toolbar--between">
+            <div class="toggle-group" data-filter-group>
+              ${buildFilterButton("all", "All", state.analysisView.filter)}
+              ${buildFilterButton("undecided", "Undecided", state.analysisView.filter)}
+              ${buildFilterButton("completed", "Completed", state.analysisView.filter)}
+              ${buildFilterButton("level", "Hierarchy review", state.analysisView.filter)}
+              ${buildFilterButton("review", "Conflict flags", state.analysisView.filter)}
+              ${buildFilterButton("ready", "Clean mappings", state.analysisView.filter)}
+            </div>
+            <div class="control-row control-row--wrap">
+              <button class="ghost-button ghost-button--small" type="button" data-open-change-summary>
+                Change summary (${changeSummaryCount})
+              </button>
+            </div>
           </div>
         </div>
         <div class="results-section">${groupsHtml}</div>
