@@ -924,6 +924,8 @@ button:hover,
 
 .result-card--queue-completed {
   border-left-color: rgba(163, 215, 149, 0.9);
+  background: rgba(43, 47, 53, 0.72);
+  opacity: 0.82;
 }
 
 .result-card__badges {
@@ -998,6 +1000,11 @@ button:hover,
 .doc-badge--queue-completed {
   background: rgba(163, 215, 149, 0.12);
   color: var(--success);
+}
+
+.result-card--queue-completed:hover,
+.result-card--queue-completed:focus-within {
+  opacity: 0.96;
 }
 
 .redline-disclosure {

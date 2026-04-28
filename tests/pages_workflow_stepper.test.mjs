@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildGroupPrimaryAction, buildWorkflowStepStates } from "../docs/app.mjs";
+import { buildGroupPrimaryAction, buildWorkflowStepStates, sortRequirementGroupsForReview } from "../docs/app.mjs";
 
 test("buildWorkflowStepStates marks past, current, and future review steps clearly", () => {
   const states = buildWorkflowStepStates("documentsSection");
@@ -40,5 +40,23 @@ test("buildGroupPrimaryAction emphasizes the next action for each review state",
       [groupKey]: { decision: "accept", note: "Looks good." },
     })?.action,
     "view-support"
+  );
+});
+
+test("sortRequirementGroupsForReview keeps active work ahead of completed groups", () => {
+  const groups = [
+    { requirementIds: ["req-3"], recommendedPrimaryRequirementId: "req-3" },
+    { requirementIds: ["req-1"], recommendedPrimaryRequirementId: "req-1" },
+    { requirementIds: ["req-2"], recommendedPrimaryRequirementId: "req-2" },
+  ];
+
+  const sorted = sortRequirementGroupsForReview(groups, {
+    "req-1": { decision: "accept" },
+    "req-2": { note: "Started review." },
+  });
+
+  assert.deepEqual(
+    sorted.map((group) => group.recommendedPrimaryRequirementId),
+    ["req-3", "req-2", "req-1"]
   );
 });

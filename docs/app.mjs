@@ -197,6 +197,20 @@ export function buildGroupPrimaryAction(group, result = state.analysisView.resul
   };
 }
 
+export function sortRequirementGroupsForReview(groups, groupDecisions = state.analysisView.groupDecisions) {
+  const stateRank = {
+    undecided: 0,
+    "in-review": 1,
+    completed: 2,
+  };
+
+  return [...groups].sort((left, right) => {
+    const leftRank = stateRank[getGroupReviewState(left, groupDecisions)] ?? 99;
+    const rightRank = stateRank[getGroupReviewState(right, groupDecisions)] ?? 99;
+    return leftRank - rightRank;
+  });
+}
+
 function deriveTitleFromUrl(url) {
   try {
     const parsed = new URL(url);
@@ -2212,8 +2226,12 @@ function buildRequirementGroupMarkup(result, groups) {
     `;
   };
 
-  const quickWins = groups.filter((group) => group.recommendationBucket === "quick-win");
-  const materialChanges = groups.filter((group) => group.recommendationBucket === "material-change");
+  const quickWins = sortRequirementGroupsForReview(
+    groups.filter((group) => group.recommendationBucket === "quick-win")
+  );
+  const materialChanges = sortRequirementGroupsForReview(
+    groups.filter((group) => group.recommendationBucket === "material-change")
+  );
 
   return `
     <div class="bucket-stack">
