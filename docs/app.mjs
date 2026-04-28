@@ -141,6 +141,12 @@ function getGroupDecision(group) {
   };
 }
 
+function getPrimaryRequirementForGroup(result, group) {
+  return result?.requirements?.find(
+    (requirement) => requirement.requirementId === group?.recommendedPrimaryRequirementId
+  ) || null;
+}
+
 function getGroupReviewState(group, groupDecisions = state.analysisView.groupDecisions) {
   const decision = groupDecisions[getRequirementGroupKey(group)] || {};
   if (decision.decision) {
@@ -154,6 +160,41 @@ function getGroupReviewState(group, groupDecisions = state.analysisView.groupDec
 
 function hasGroupDecision(group, groupDecisions = state.analysisView.groupDecisions) {
   return Boolean((groupDecisions[getRequirementGroupKey(group)] || {}).decision);
+}
+
+export function buildGroupPrimaryAction(group, result = state.analysisView.result, groupDecisions = state.analysisView.groupDecisions) {
+  const reviewState = getGroupReviewState(group, groupDecisions);
+  const primary = getPrimaryRequirementForGroup(result, group);
+  const base = {
+    groupKey: getRequirementGroupKey(group),
+    reviewState,
+    query: primary?.sourceDocumentTitle || "",
+  };
+
+  if (reviewState === "completed") {
+    return {
+      ...base,
+      action: "view-support",
+      label: "View support",
+      detail: "Open the supporting detail view for this mapped requirement set.",
+    };
+  }
+
+  if (reviewState === "in-review") {
+    return {
+      ...base,
+      action: "focus-decision",
+      label: "Set decision",
+      detail: "You already started a note. Capture the final disposition next.",
+    };
+  }
+
+  return {
+    ...base,
+    action: "open-redline",
+    label: "Review redline",
+    detail: "Check the proposed wording before choosing a disposition.",
+  };
 }
 
 function deriveTitleFromUrl(url) {
@@ -1890,7 +1931,7 @@ function buildRequirementRedlineMarkup(result, group) {
 
   const summary = model.compareResult.summary;
   return `
-    <details class="redline-disclosure">
+    <details class="redline-disclosure" data-group-redline="${escapeHtml(getRequirementGroupKey(group))}">
       <summary>Open redline preview</summary>
       <div class="redline-preview">
         <div class="redline-preview__meta">
@@ -2016,7 +2057,7 @@ function buildGroupDecisionMarkup(group) {
     : "";
 
   return `
-    <section class="decision-card">
+    <section class="decision-card" data-group-decision-panel="${escapeHtml(key)}">
       <div class="decision-card__header">
         <h5>Reviewer decision</h5>
         ${updatedLabel ? `<span class="result-card__meta">Updated ${escapeHtml(updatedLabel)}</span>` : ""}
@@ -2058,10 +2099,9 @@ function buildRequirementGroupMarkup(result, groups) {
     const requirements = group.requirementIds
       .map((id) => result.requirements.find((requirement) => requirement.requirementId === id))
       .filter(Boolean);
-    const primary = result.requirements.find(
-      (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
-    );
+    const primary = getPrimaryRequirementForGroup(result, group);
     const reviewState = getGroupReviewState(group);
+    const primaryAction = buildGroupPrimaryAction(group, result);
     const reviewStateLabel =
       reviewState === "completed"
         ? "Completed"
@@ -2097,6 +2137,18 @@ function buildRequirementGroupMarkup(result, groups) {
                   : "This group still needs reviewer triage."
             }
           </span>
+        </div>
+        <div class="queue-primary-action">
+          <button
+            class="primary-button queue-primary-action__button"
+            type="button"
+            data-group-primary-action="${escapeHtml(primaryAction.action)}"
+            data-group-key="${escapeHtml(primaryAction.groupKey)}"
+            data-group-query="${escapeHtml(primaryAction.query)}"
+          >
+            ${escapeHtml(primaryAction.label)}
+          </button>
+          <p class="queue-primary-action__detail">${escapeHtml(primaryAction.detail)}</p>
         </div>
         <p class="result-card__summary">${primary.requirementText}</p>
         <p class="result-card__summary">${group.recommendation}</p>
@@ -3543,6 +3595,36 @@ function updateGroupDecision(groupKey, patch) {
   };
 }
 
+function focusGroupDecision(groupKey) {
+  const select = document.querySelector(`[data-group-decision][data-group-key="${CSS.escape(groupKey)}"]`);
+  const panel = document.querySelector(`[data-group-decision-panel="${CSS.escape(groupKey)}"]`);
+  panel?.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+  if (select instanceof HTMLElement) {
+    select.focus({ preventScroll: true });
+  }
+}
+
+function openGroupRedline(groupKey) {
+  const disclosure = document.querySelector(`[data-group-redline="${CSS.escape(groupKey)}"]`);
+  if (!(disclosure instanceof HTMLDetailsElement)) {
+    return;
+  }
+  disclosure.open = true;
+  disclosure.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+function openGroupSupportView(query) {
+  state.analysisView.query = query || "";
+  persistState();
+  goToRoute("details");
+}
+
 function wireStepEvents(scope) {
   scope.querySelectorAll("[data-open-change-summary]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3594,6 +3676,26 @@ function wireStepEvents(scope) {
       state.analysisView.filter = button.getAttribute("data-set-filter") || "all";
       persistState();
       renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-group-primary-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.getAttribute("data-group-primary-action");
+      const groupKey = button.getAttribute("data-group-key") || "";
+      const query = button.getAttribute("data-group-query") || "";
+
+      if (action === "open-redline") {
+        openGroupRedline(groupKey);
+        return;
+      }
+
+      if (action === "focus-decision") {
+        focusGroupDecision(groupKey);
+        return;
+      }
+
+      openGroupSupportView(query);
     });
   });
 
