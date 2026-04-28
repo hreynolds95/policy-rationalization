@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildGroupPrimaryAction, buildWorkflowStepStates, sortRequirementGroupsForReview } from "../docs/app.mjs";
+import {
+  buildGroupPrimaryAction,
+  buildWorkflowStepStates,
+  filterRequirementInventoryDocuments,
+  sortRequirementGroupsForReview,
+} from "../docs/app.mjs";
 
 test("buildWorkflowStepStates marks past, current, and future review steps clearly", () => {
   const states = buildWorkflowStepStates("documentsSection");
@@ -59,4 +64,36 @@ test("sortRequirementGroupsForReview keeps active work ahead of completed groups
     sorted.map((group) => group.recommendedPrimaryRequirementId),
     ["req-3", "req-2", "req-1"]
   );
+});
+
+test("filterRequirementInventoryDocuments isolates hierarchy and procedure-like requirements", () => {
+  const documents = [
+    {
+      id: "doc-1",
+      title: "Policy A",
+      requirements: [
+        {
+          requirementId: "req-1",
+          hierarchyReview: { alignment: "aligned", scopeStatus: "in-scope" },
+        },
+        {
+          requirementId: "req-2",
+          hierarchyReview: { alignment: "review", scopeStatus: "out-of-scope" },
+        },
+      ],
+      requirementCount: 2,
+    },
+  ];
+
+  const hierarchyView = filterRequirementInventoryDocuments(documents, "hierarchy");
+  const procedureView = filterRequirementInventoryDocuments(documents, "procedure");
+
+  assert.equal(hierarchyView.counts.all, 2);
+  assert.equal(hierarchyView.counts.hierarchy, 1);
+  assert.equal(hierarchyView.documents[0].requirements.length, 1);
+  assert.equal(hierarchyView.documents[0].requirements[0].requirementId, "req-2");
+
+  assert.equal(procedureView.counts.procedure, 1);
+  assert.equal(procedureView.documents[0].requirements.length, 1);
+  assert.equal(procedureView.documents[0].requirements[0].requirementId, "req-2");
 });

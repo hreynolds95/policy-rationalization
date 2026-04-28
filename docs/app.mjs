@@ -87,6 +87,7 @@ const state = {
   analysisView: {
     query: "",
     filter: "all",
+    inventoryFilter: "all",
     documents: [],
     threshold: 0.45,
     levelOverrides: {},
@@ -292,6 +293,7 @@ function persistState() {
     analysisView: {
       query: state.analysisView.query,
       filter: state.analysisView.filter,
+      inventoryFilter: state.analysisView.inventoryFilter,
       documents: state.analysisView.documents,
       threshold: state.analysisView.threshold,
       levelOverrides: state.analysisView.levelOverrides,
@@ -334,6 +336,7 @@ function restoreState() {
     state.workspace.manualEntries = normalizeManualEntries(parsed.workspace?.manualEntries || DEFAULT_MANUAL_ENTRIES);
     state.analysisView.query = parsed.analysisView?.query || "";
     state.analysisView.filter = parsed.analysisView?.filter || "all";
+    state.analysisView.inventoryFilter = parsed.analysisView?.inventoryFilter || "all";
     state.analysisView.documents = Array.isArray(parsed.analysisView?.documents)
       ? parsed.analysisView.documents
       : [];
@@ -1101,7 +1104,11 @@ function buildHierarchyReferenceMarkup() {
 }
 
 function buildLevelReviewStepMarkup() {
-  const requirementInventoryHtml = buildRequirementInventoryMarkup(state.analysisView.result.documents);
+  const inventoryView = filterRequirementInventoryDocuments(
+    state.analysisView.result.documents,
+    state.analysisView.inventoryFilter
+  );
+  const requirementInventoryHtml = buildRequirementInventoryMarkup(inventoryView.documents);
   return `
     <section class="wizard-step-page">
       ${buildStepHero("level-review")}
@@ -1112,6 +1119,13 @@ function buildLevelReviewStepMarkup() {
         <div class="step-card-header">
           <h3>Requirement inventory</h3>
           <p class="section-subtitle">Review the extracted requirement units and source anchors before moving into mapping and consolidation.</p>
+        </div>
+        <div class="filter-toolbar filter-toolbar--between">
+          <div class="toggle-group" data-filter-group>
+            ${buildInventoryFilterButton("all", `All requirements (${inventoryView.counts.all})`, state.analysisView.inventoryFilter)}
+            ${buildInventoryFilterButton("hierarchy", `Hierarchy issues (${inventoryView.counts.hierarchy})`, state.analysisView.inventoryFilter)}
+            ${buildInventoryFilterButton("procedure", `Procedure-like (${inventoryView.counts.procedure})`, state.analysisView.inventoryFilter)}
+          </div>
         </div>
         <div class="results-section">${requirementInventoryHtml}</div>
       </section>
@@ -1699,6 +1713,60 @@ function buildRequirementInventoryMarkup(documents) {
       </article>
     `)
     .join("");
+}
+
+function buildInventoryFilterButton(value, label, activeValue) {
+  return `
+    <button class="toggle-btn ${value === activeValue ? "active" : ""}" type="button" data-inventory-filter="${value}">
+      ${escapeHtml(label)}
+    </button>
+  `;
+}
+
+export function filterRequirementInventoryDocuments(documents, inventoryFilter = "all") {
+  const counts = {
+    all: 0,
+    hierarchy: 0,
+    procedure: 0,
+  };
+
+  for (const document of documents || []) {
+    for (const requirement of document.requirements || []) {
+      counts.all += 1;
+      if (requirement.hierarchyReview?.alignment !== "aligned") {
+        counts.hierarchy += 1;
+      }
+      if (requirement.hierarchyReview?.scopeStatus !== "in-scope") {
+        counts.procedure += 1;
+      }
+    }
+  }
+
+  const predicate = (requirement) => {
+    if (inventoryFilter === "hierarchy") {
+      return requirement.hierarchyReview?.alignment !== "aligned";
+    }
+    if (inventoryFilter === "procedure") {
+      return requirement.hierarchyReview?.scopeStatus !== "in-scope";
+    }
+    return true;
+  };
+
+  const filteredDocuments = (documents || [])
+    .map((document) => {
+      const requirements = (document.requirements || []).filter(predicate);
+      return {
+        ...document,
+        requirementCount: requirements.length,
+        requirements,
+      };
+    })
+    .filter((document) => document.requirements.length);
+
+  return {
+    documents: filteredDocuments,
+    counts,
+  };
 }
 
 function buildStandaloneRedlineUrl(currentText, proposedText) {
@@ -3412,6 +3480,7 @@ function resetWorkspace() {
   state.workspace.manualEntries = cloneManualEntries(DEFAULT_MANUAL_ENTRIES);
   state.analysisView.query = "";
   state.analysisView.filter = "all";
+  state.analysisView.inventoryFilter = "all";
   state.analysisView.documents = [];
   state.analysisView.threshold = 0.45;
   state.analysisView.levelOverrides = {};
@@ -3552,6 +3621,7 @@ async function runAnalysis() {
     pruneGroupDecisions(state.analysisView.result);
     state.analysisView.query = "";
     state.analysisView.filter = "all";
+    state.analysisView.inventoryFilter = "all";
     state.analysisView.usedSampleData = state.includeSampleData;
     state.analysisView.usedSampleLibraryKey = state.sampleLibraryKey;
     state.analysisView.issues = issues;
@@ -3715,6 +3785,14 @@ function wireStepEvents(scope) {
   scope.querySelectorAll("[data-set-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       state.analysisView.filter = button.getAttribute("data-set-filter") || "all";
+      persistState();
+      renderApp();
+    });
+  });
+
+  scope.querySelectorAll("[data-inventory-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.analysisView.inventoryFilter = button.getAttribute("data-inventory-filter") || "all";
       persistState();
       renderApp();
     });
