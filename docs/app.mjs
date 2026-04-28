@@ -13,7 +13,7 @@ import {
 } from "./sample-data.mjs";
 
 const SESSION_STORAGE_KEY = "policy-rationalization-wizard-state-v2";
-const STATIC_LAST_UPDATED = "Apr 28, 2026, 1:54 PM EDT";
+const STATIC_LAST_UPDATED = "Apr 28, 2026, 1:56 PM EDT";
 const GROUP_DECISION_OPTIONS = [
   { value: "accept", label: "Accept" },
   { value: "revise", label: "Revise" },
@@ -139,6 +139,17 @@ function getGroupDecision(group) {
     note: "",
     updatedAt: "",
   };
+}
+
+function getGroupReviewState(group, groupDecisions = state.analysisView.groupDecisions) {
+  const decision = groupDecisions[getRequirementGroupKey(group)] || {};
+  if (decision.decision) {
+    return "completed";
+  }
+  if ((decision.note || "").trim()) {
+    return "in-review";
+  }
+  return "undecided";
 }
 
 function hasGroupDecision(group, groupDecisions = state.analysisView.groupDecisions) {
@@ -2050,20 +2061,42 @@ function buildRequirementGroupMarkup(result, groups) {
     const primary = result.requirements.find(
       (requirement) => requirement.requirementId === group.recommendedPrimaryRequirementId
     );
+    const reviewState = getGroupReviewState(group);
+    const reviewStateLabel =
+      reviewState === "completed"
+        ? "Completed"
+        : reviewState === "in-review"
+          ? "In review"
+          : "Undecided";
 
     return `
-      <article class="result-card">
+      <article class="result-card result-card--queue result-card--queue-${reviewState}">
         <div class="result-card__header result-card__header--tight">
           <div>
             <h4>${primary.sourceDocumentTitle}</h4>
             <p class="result-card__meta">Requirement group ${groupIndex + 1}</p>
           </div>
           <div class="result-card__badges">
+            <span class="doc-badge doc-badge--queue doc-badge--queue-${reviewState}">
+              ${reviewStateLabel}
+            </span>
             <span class="doc-badge ${group.recommendationBucket === "quick-win" ? "doc-badge--ok" : "doc-badge--warn"}">
               ${group.recommendationBucket === "quick-win" ? "Quick win" : "Material change"}
             </span>
             <span class="pill">${group.avgInternalSimilarity.toFixed(4)} similarity</span>
           </div>
+        </div>
+        <div class="queue-state-row">
+          <strong>${reviewStateLabel}</strong>
+          <span>
+            ${
+              reviewState === "completed"
+                ? "A reviewer decision has been captured for this group."
+                : reviewState === "in-review"
+                  ? "A reviewer note exists, but the final disposition is still missing."
+                  : "This group still needs reviewer triage."
+            }
+          </span>
         </div>
         <p class="result-card__summary">${primary.requirementText}</p>
         <p class="result-card__summary">${group.recommendation}</p>

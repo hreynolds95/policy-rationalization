@@ -909,6 +909,23 @@ button:hover,
   margin: 0;
 }
 
+.result-card--queue {
+  position: relative;
+  border-left: 4px solid var(--line);
+}
+
+.result-card--queue-undecided {
+  border-left-color: rgba(255, 217, 102, 0.9);
+}
+
+.result-card--queue-in-review {
+  border-left-color: rgba(124, 172, 255, 0.9);
+}
+
+.result-card--queue-completed {
+  border-left-color: rgba(163, 215, 149, 0.9);
+}
+
 .result-card__badges {
   display: inline-flex;
   align-items: center;
@@ -927,6 +944,42 @@ button:hover,
   margin: 10px 0 0;
   color: var(--accent-2);
   line-height: 1.5;
+}
+
+.queue-state-row {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 10px;
+}
+
+.queue-state-row strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.queue-state-row span {
+  color: var(--muted);
+  font-size: 0.77rem;
+  line-height: 1.45;
+}
+
+.doc-badge--queue {
+  border-color: transparent;
+}
+
+.doc-badge--queue-undecided {
+  background: rgba(255, 217, 102, 0.12);
+  color: var(--warning);
+}
+
+.doc-badge--queue-in-review {
+  background: rgba(124, 172, 255, 0.12);
+  color: var(--accent);
+}
+
+.doc-badge--queue-completed {
+  background: rgba(163, 215, 149, 0.12);
+  color: var(--success);
 }
 
 .redline-disclosure {
